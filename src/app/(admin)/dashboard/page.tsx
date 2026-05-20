@@ -4,7 +4,7 @@ import { scopedChannelFilter } from "@/lib/scope";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { StatCard } from "@/components/admin/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Store, Users, BookOpen, ReceiptText, Smartphone, Activity, TrendingUp } from "lucide-react";
+import { Building2, Store, Users, BookOpen, ReceiptText, Smartphone, Activity, TrendingUp, ClipboardList } from "lucide-react";
 import { formatMoney } from "@/lib/utils";
 import { ChannelLeaderboard } from "./_components/ChannelLeaderboard";
 import { TrendChart } from "./_components/TrendChart";
@@ -64,6 +64,7 @@ export default async function DashboardPage() {
   })).sort((a, b) => b.users - a.users).slice(0, 8);
 
   const scopeHint = scopedCh && scopedCh !== "__none__" ? "（当前代操作渠道范围）" : (session.role === "channel_admin" ? "（我的渠道范围）" : "（全平台）");
+  const isAdmin = session.role !== "channel_admin";
 
   return (
     <div>
@@ -73,12 +74,12 @@ export default async function DashboardPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <StatCard tone="primary" label="渠道商" value={channelsRes.count || 0} icon={Building2} hint="active" />
-        <StatCard tone="info" label="店铺" value={storesRes.count || 0} icon={Store} hint="覆盖门店数" />
-        <StatCard label="终端用户" value={usersRes.count || 0} icon={Users} hint="学生数" />
+        <StatCard tone="primary" label="渠道商" value={channelsRes.count || 0} icon={Building2} hint="active" href={isAdmin ? "/channels" : undefined} />
+        <StatCard tone="info" label="店铺" value={storesRes.count || 0} icon={Store} hint="覆盖门店数" href="/stores" />
+        <StatCard label="终端用户" value={usersRes.count || 0} icon={Users} hint="学生数" href="/end-users" />
         <StatCard label="设备数" value={"—"} icon={Smartphone} hint="待接入" />
-        <StatCard tone="warning" label="订单数" value={ordersRes.count || 0} icon={ReceiptText} hint="累计订单" />
-        <StatCard tone="primary" label="累计收入" value={formatMoney(totalRevenue)} icon={TrendingUp} hint="已付订单" />
+        <StatCard tone="warning" label="订单数" value={ordersRes.count || 0} icon={ReceiptText} hint="累计订单" href="/orders" />
+        <StatCard tone="primary" label="累计收入" value={formatMoney(totalRevenue)} icon={TrendingUp} hint="已付订单" href="/orders" />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
@@ -104,32 +105,22 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader><CardTitle className="text-base">题库</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-3xl font-semibold tabular-nums">{assessRes.count || 0}</div>
-            <p className="mt-1 text-xs text-muted-foreground">测评题总数</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-base">资源</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-3xl font-semibold tabular-nums">{resRes.count || 0}</div>
-            <p className="mt-1 text-xs text-muted-foreground">文本 / 视频 / 文件</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-base">即将上线</CardTitle></CardHeader>
-          <CardContent>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>· 测评结果分析与报告</li>
-              <li>· 终端 App 数据对接</li>
-              <li>· 渠道返佣结算</li>
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
+      {isAdmin && (
+        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          <StatCard label="题库" value={assessRes.count || 0} icon={ClipboardList} hint="测评题总数" href="/assessments" />
+          <StatCard label="资源" value={resRes.count || 0} icon={BookOpen} hint="文本 / 视频 / 文件" href="/resources" />
+          <Card>
+            <CardHeader><CardTitle className="text-base">即将上线</CardTitle></CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li>· 测评结果分析与报告</li>
+                <li>· 终端 App 数据对接</li>
+                <li>· 渠道返佣结算</li>
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

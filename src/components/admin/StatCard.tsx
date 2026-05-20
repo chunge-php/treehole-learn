@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowUpRight, TrendingDown, TrendingUp } from "lucide-react";
 
 export function StatCard({
   label,
@@ -8,6 +9,7 @@ export function StatCard({
   hint,
   trend,
   tone = "default",
+  href,
   className
 }: {
   label: string;
@@ -16,6 +18,7 @@ export function StatCard({
   hint?: string;
   trend?: number;
   tone?: "default" | "primary" | "info" | "warning";
+  href?: string;
   className?: string;
 }) {
   const toneStyles: Record<string, string> = {
@@ -24,9 +27,15 @@ export function StatCard({
     info: "from-info/15 to-info/5 text-info",
     warning: "from-warning/15 to-warning/5 text-warning"
   };
-  return (
-    <div className={cn("relative overflow-hidden rounded-xl border bg-card p-5 transition-shadow hover:shadow-md", className)}>
+
+  const Inner = (
+    <>
       <div className={cn("absolute inset-x-0 top-0 h-24 bg-gradient-to-b", toneStyles[tone])} />
+      {href && (
+        <div className="absolute right-4 top-4 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-background/0 text-muted-foreground opacity-0 transition-all duration-300 group-hover:bg-primary group-hover:text-primary-foreground group-hover:opacity-100 group-hover:scale-110">
+          <ArrowUpRight className="h-3.5 w-3.5" />
+        </div>
+      )}
       <div className="relative flex items-start justify-between">
         <div>
           <div className="text-xs text-muted-foreground">{label}</div>
@@ -34,7 +43,7 @@ export function StatCard({
           {hint && <div className="mt-1 text-[11px] text-muted-foreground">{hint}</div>}
         </div>
         {Icon && (
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-background/70 backdrop-blur">
+          <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg bg-background/70 backdrop-blur transition-transform", href && "group-hover:-translate-y-0.5 group-hover:opacity-0")}>
             <Icon className="h-4 w-4 text-muted-foreground" />
           </div>
         )}
@@ -53,6 +62,23 @@ export function StatCard({
           <span className="text-muted-foreground">较上周</span>
         </div>
       )}
-    </div>
+    </>
   );
+
+  const baseCls = cn(
+    "group relative block overflow-hidden rounded-xl border bg-card p-5 transition-all",
+    href
+      ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-lg hover:border-primary/40"
+      : "hover:shadow-md",
+    className
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={baseCls}>
+        {Inner}
+      </Link>
+    );
+  }
+  return <div className={baseCls}>{Inner}</div>;
 }

@@ -77,14 +77,8 @@ export function EndUsersClient({
       姓名: r.name,
       所属店铺: r.stores?.name || "",
       所属渠道: r.channels?.name || "",
-      联系电话: r.phone || "",
-      性别: GENDER_LABEL[r.gender] || "",
-      年龄: r.age ?? "",
-      年级: r.grade || "",
-      学校: r.school || "",
-      家长姓名: r.parent_name || "",
-      家长电话: r.parent_phone || "",
-      付费金额: Number(r.paid_amount || 0),
+      登录账号: r.login_username || "",
+      关联手机号: r.phone || "",
       创建时间: formatDateCN(r.created_at)
     }));
     downloadExcel(data, `普通用户导出_${new Date().getTime()}.xlsx`);
@@ -144,10 +138,8 @@ export function EndUsersClient({
                 <TableHead>姓名</TableHead>
                 <TableHead>所属店铺</TableHead>
                 <TableHead>渠道</TableHead>
-                <TableHead>联系电话</TableHead>
-                <TableHead>性别 / 年龄</TableHead>
-                <TableHead>年级</TableHead>
-                <TableHead>付费金额</TableHead>
+                <TableHead>登录账号</TableHead>
+                <TableHead>手机号</TableHead>
                 <TableHead>创建时间</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow>
@@ -163,12 +155,16 @@ export function EndUsersClient({
                     {r.stores?.name ? <Badge variant="outline">{r.stores.name}</Badge> : <span className="text-muted-foreground text-xs">—</span>}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{r.channels?.name || "—"}</TableCell>
-                  <TableCell className="text-sm">{r.phone || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {[GENDER_LABEL[r.gender], r.age ? `${r.age}岁` : null].filter(Boolean).join(" · ") || "—"}
+                  <TableCell className="text-sm">
+                    {r.login_username ? (
+                      <span className="font-mono text-xs">{r.login_username}</span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">— 未开通</span>
+                    )}
                   </TableCell>
-                  <TableCell className="text-sm">{r.grade || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
-                  <TableCell className="text-sm tabular-nums">{formatMoney(r.paid_amount)}</TableCell>
+                  <TableCell className="text-sm font-mono text-xs">
+                    {r.phone || <span className="text-muted-foreground">—</span>}
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDateCN(r.created_at)}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>

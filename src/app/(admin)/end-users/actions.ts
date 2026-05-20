@@ -4,12 +4,17 @@ import { adminSupabase } from "@/lib/supabase/admin";
 import { requireSession } from "@/lib/auth";
 import { scopedChannelFilter } from "@/lib/scope";
 import { shortId } from "@/lib/utils";
+import bcrypt from "bcryptjs";
 
 export type EndUserInput = {
   id?: string;
-  store_id: string;
+  channel_id?: string | null;
+  store_id?: string | null;
   name: string;
-  phone?: string | null;
+  phone?: string | null; // 关联手机号 (登录用)
+  login_username?: string | null;
+  login_password?: string; // 明文; create 必填, edit 可选 (留空保持不变)
+  // 以下字段供编辑时保留, 创建时不强制
   gender?: "male" | "female" | "other" | null;
   age?: number | null;
   grade?: string | null;
@@ -35,12 +40,40 @@ export async function listEndUsers(params: { q?: string; store_id?: string | nul
   else if (params.channel_id) qb = qb.eq("channel_id", params.channel_id);
 
   if (params.store_id) qb = qb.eq("store_id", params.store_id);
-  if (params.q) qb = qb.or(`name.ilike.%${params.q}%,phone.ilike.%${params.q}%`);
-  qb = qb.order("created_at", { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1);
+  if (params.q) qb = qb.or(`name.ilike.%${params.q}%,phone.ilike.%${params.q}%,login_username.ilike.%${params.q}%`);
+  qb = qb
+    .order("channel_id", { ascending: true, nullsFirst: true })
+    .order("created_at", { ascending: false })
+    .range((page - 1) * pageSize, page * pageSize - 1);
 
   const { data, count, error } = await qb;
   if (error) throw new Error(error.message);
-  return { rows: data || [], total: count || 0 };
+  // 不向外返回 password_hash
+  const rows = (data || []).map((r: any) => {
+    const { login_password_hash, ...rest } = r;
+    return { ...rest, _has_login_password: !!login_password_hash };
+  });
+  return { rows, total: count || 0 };
+}
+
+/** 实时校验 end_user 登录账号是否可用 */
+export async function checkEndUserUsernameAvailable(
+  username: string,
+  excludeId?: string
+): Promise<{ ok: boolean; reason?: string }> {
+  requireSession();
+  const u = (username || "").trim();
+  if (!u) return { ok: false, reason: "登录账号不能为空" };
+  if (u.length < 2) return { ok: false, reason: "至少 2 个字符" };
+  if (!/^[一-龥a-zA-Z0-9_.-]+$/.test(u)) {
+    return { ok: false, reason: "仅支持中文、字母、数字与 _ . -" };
+  }
+  const sb = adminSupabase();
+  let qb = sb.from("end_users").select("id").eq("login_username", u).limit(1);
+  if (excludeId) qb = qb.neq("id", excludeId);
+  const { data } = await qb.maybeSingle();
+  if (data) return { ok: false, reason: "登录账号已被占用" };
+  return { ok: true };
 }
 
 export async function upsertEndUser(input: EndUserInput) {
@@ -53,10 +86,9 @@ export async function upsertEndUser(input: EndUserInput) {
   }
 
   let store_id: string | null = null;
-  let channel_id: string | null = null;
+  let channel_id: string | null = input.channel_id ?? null;
 
   if (input.store_id) {
-    // 反查 store → channel_id; 同时校验 channel_admin 权限
     const { data: store, error: stErr } = await sb.from("stores").select("id, channel_id").eq("id", input.store_id).maybeSingle();
     if (stErr) throw new Error(stErr.message);
     if (!store) throw new Error("所属店铺不存在");
@@ -64,35 +96,79 @@ export async function upsertEndUser(input: EndUserInput) {
       throw new Error("无权操作其它渠道下的店铺");
     }
     store_id = store.id;
+    // 店铺归属的渠道优先 (兼容 admin 显式选了渠道但店铺渠道不一致的情况, 以店铺为准)
     channel_id = store.channel_id;
   }
 
-  const payload = {
+  // 登录账号校验
+  let login_username: string | null = null;
+  if (input.login_username !== undefined && input.login_username !== null) {
+    const u = String(input.login_username).trim();
+    if (u) {
+      if (!/^[一-龥a-zA-Z0-9_.-]+$/.test(u)) {
+        throw new Error("登录账号仅支持中文、字母、数字与 _ . -");
+      }
+      if (u.length < 2) throw new Error("登录账号至少 2 个字符");
+      let dupQ = sb.from("end_users").select("id").eq("login_username", u).limit(1);
+      if (input.id) dupQ = dupQ.neq("id", input.id);
+      const { data: dup } = await dupQ.maybeSingle();
+      if (dup) throw new Error("登录账号已被占用");
+      login_username = u;
+    }
+  }
+
+  // 密码处理
+  let login_password_hash: string | undefined = undefined;
+  if (input.login_password && input.login_password.length > 0) {
+    if (input.login_password.length < 6) throw new Error("登录密码至少 6 位");
+    login_password_hash = await bcrypt.hash(input.login_password, 10);
+  }
+  if (!input.id && login_username && !login_password_hash) {
+    throw new Error("设置了登录账号必须同时填写登录密码");
+  }
+
+  const basePayload: any = {
     store_id,
     channel_id,
     name: input.name,
     phone: input.phone,
-    gender: input.gender,
+    login_username,
+    gender: input.gender ?? null,
     age: input.age ?? null,
-    grade: input.grade,
-    school: input.school,
-    parent_name: input.parent_name,
-    parent_phone: input.parent_phone,
+    grade: input.grade ?? null,
+    school: input.school ?? null,
+    parent_name: input.parent_name ?? null,
+    parent_phone: input.parent_phone ?? null,
     paid_amount: input.paid_amount ?? 0,
     status: input.status || "active",
-    remark: input.remark
+    remark: input.remark ?? null
   };
+  if (login_password_hash !== undefined) basePayload.login_password_hash = login_password_hash;
 
   if (input.id) {
-    let qb = sb.from("end_users").update(payload).eq("id", input.id);
+    let qb = sb.from("end_users").update(basePayload).eq("id", input.id);
     if (s.role === "channel_admin") qb = qb.eq("channel_id", s.channel_id || "__none__");
     const { error } = await qb;
     if (error) throw new Error(error.message);
   } else {
     const id = shortId("eu");
-    const { error } = await sb.from("end_users").insert({ id, ...payload });
+    const { error } = await sb.from("end_users").insert({ id, ...basePayload });
     if (error) throw new Error(error.message);
   }
+  revalidatePath("/end-users");
+  return { ok: true };
+}
+
+/** 重置 end_user 登录密码 */
+export async function resetEndUserPassword(id: string, newPassword: string) {
+  const s = requireSession();
+  if (!newPassword || newPassword.length < 6) throw new Error("密码至少 6 位");
+  const sb = adminSupabase();
+  const hash = await bcrypt.hash(newPassword, 10);
+  let qb = sb.from("end_users").update({ login_password_hash: hash }).eq("id", id);
+  if (s.role === "channel_admin") qb = qb.eq("channel_id", s.channel_id || "__none__");
+  const { error } = await qb;
+  if (error) throw new Error(error.message);
   revalidatePath("/end-users");
   return { ok: true };
 }
@@ -119,14 +195,13 @@ export async function bulkImportEndUsers(rows: Record<string, any>[]) {
   const storeMap = new Map<string, { id: string; channel_id: string }>();
   (stores || []).forEach((st: any) => storeMap.set(String(st.name).trim(), { id: st.id, channel_id: st.channel_id }));
 
+  // 已有 login_username 集合
+  const { data: existingUsers = [] } = await sb.from("end_users").select("login_username").not("login_username", "is", null);
+  const usernameSet = new Set((existingUsers || []).map((u: any) => u.login_username));
+  const usernameSeenInBatch = new Set<string>();
+
   let success = 0;
   const errors: { row: number; message: string }[] = [];
-
-  const genderMap: Record<string, "male" | "female" | "other"> = {
-    "男": "male", "male": "male", "M": "male", "m": "male",
-    "女": "female", "female": "female", "F": "female", "f": "female",
-    "其他": "other", "other": "other"
-  };
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -144,32 +219,44 @@ export async function bulkImportEndUsers(rows: Record<string, any>[]) {
         continue;
       }
     } else if (s.role === "channel_admin") {
-      // 渠道商必须指定店铺
       errors.push({ row: i + 2, message: "所属店铺名称为空" });
       continue;
     }
-    // admin 留空 → 创建无关联用户
 
-    const rawGender = String(r["性别"] || r["gender"] || "").trim();
-    const gender = rawGender ? (genderMap[rawGender] || null) : null;
+    const username = String(r["登录账号"] || r["login_username"] || "").trim() || null;
+    const password = String(r["登录密码"] || r["login_password"] || "").trim() || null;
+    let password_hash: string | null = null;
+    if (username) {
+      if (!/^[一-龥a-zA-Z0-9_.-]+$/.test(username)) {
+        errors.push({ row: i + 2, message: "登录账号格式不合法" });
+        continue;
+      }
+      if (usernameSet.has(username) || usernameSeenInBatch.has(username)) {
+        errors.push({ row: i + 2, message: `登录账号「${username}」已被占用` });
+        continue;
+      }
+      if (!password || password.length < 6) {
+        errors.push({ row: i + 2, message: "设置了登录账号必须填写至少 6 位密码" });
+        continue;
+      }
+      password_hash = await bcrypt.hash(password, 10);
+    }
 
     const { error } = await sb.from("end_users").insert({
       id: shortId("eu"),
       store_id: store?.id || null,
       channel_id: store?.channel_id || null,
       name,
-      phone: r["电话"] || r["phone"] || null,
-      gender,
-      age: r["年龄"] ? Number(r["年龄"]) || null : (r["age"] ? Number(r["age"]) || null : null),
-      grade: r["年级"] || r["grade"] || null,
-      school: r["学校"] || r["school"] || null,
-      parent_name: r["家长姓名"] || r["parent_name"] || null,
-      parent_phone: r["家长电话"] || r["parent_phone"] || null,
-      paid_amount: r["付费金额"] ? Number(r["付费金额"]) || 0 : (r["paid_amount"] ? Number(r["paid_amount"]) || 0 : 0),
+      phone: r["手机号"] || r["关联手机号"] || r["电话"] || r["phone"] || null,
+      login_username: username,
+      login_password_hash: password_hash,
       remark: r["备注"] || r["remark"] || null
     });
     if (error) errors.push({ row: i + 2, message: error.message });
-    else success++;
+    else {
+      success++;
+      if (username) usernameSeenInBatch.add(username);
+    }
   }
   revalidatePath("/end-users");
   return { total: rows.length, success, failed: rows.length - success, errors };
@@ -189,6 +276,20 @@ export async function listStoresForSelect() {
     .order("created_at", { ascending: false })
     .limit(500);
   if (scope) qb = qb.eq("channel_id", scope);
+  const { data = [] } = await qb;
+  return data || [];
+}
+
+/**
+ * 表单用: 返回所有可见渠道
+ */
+export async function listChannelsForSelect() {
+  const s = requireSession();
+  const sb = adminSupabase();
+  const scope = scopedChannelFilter(s);
+  if (scope === "__none__") return [];
+  let qb = sb.from("channels").select("id, name").order("created_at", { ascending: false });
+  if (scope) qb = qb.eq("id", scope);
   const { data = [] } = await qb;
   return data || [];
 }

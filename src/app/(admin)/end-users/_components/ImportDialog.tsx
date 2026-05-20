@@ -17,14 +17,9 @@ export function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; on
       [
         { key: "name", label: "姓名", example: "张三" },
         { key: "store_name", label: "所属店铺名称", example: "海淀中关村学习中心" },
-        { key: "phone", label: "电话", example: "13800138000" },
-        { key: "gender", label: "性别", example: "男" },
-        { key: "age", label: "年龄", example: 11 },
-        { key: "grade", label: "年级", example: "五年级" },
-        { key: "school", label: "学校", example: "中关村三小" },
-        { key: "parent_name", label: "家长姓名", example: "张父" },
-        { key: "parent_phone", label: "家长电话", example: "13900139000" },
-        { key: "paid_amount", label: "付费金额", example: 199 },
+        { key: "phone", label: "关联手机号", example: "13800138000" },
+        { key: "login_username", label: "登录账号", example: "zhangsan001" },
+        { key: "login_password", label: "登录密码", example: "abc123" },
         { key: "remark", label: "备注", example: "" }
       ],
       "普通用户导入模板.xlsx"

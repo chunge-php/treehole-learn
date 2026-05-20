@@ -7,6 +7,6 @@ const nextConfig = {
       { protocol: "https", hostname: "images.unsplash.com" }
     ]
   },
-  experimental: { serverActions: { bodySizeLimit: "10mb" } }
+  experimental: { serverActions: { bodySizeLimit: "55mb" } }
 };
 export default nextConfig;

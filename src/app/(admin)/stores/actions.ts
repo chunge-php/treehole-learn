@@ -39,7 +39,29 @@ export async function listStores(params: { q?: string; status?: string; channel_
 
   const { data, count, error } = await qb;
   if (error) throw new Error(error.message);
-  return { rows: data || [], total: count || 0 };
+  const rows = data || [];
+
+  // 附加聚合: 用户数 / 测评人次 / 销售金额
+  const ids = rows.map((r: any) => r.id);
+  if (ids.length > 0) {
+    const [usersAgg, recordsAgg, ordersAgg] = await Promise.all([
+      sb.from("end_users").select("store_id").in("store_id", ids),
+      sb.from("assessment_records").select("store_id").in("store_id", ids),
+      sb.from("orders").select("store_id, amount").eq("pay_status", "paid").in("store_id", ids)
+    ]);
+    const uCount: Record<string, number> = {};
+    const rCount: Record<string, number> = {};
+    const oRevenue: Record<string, number> = {};
+    (usersAgg.data || []).forEach((r: any) => { uCount[r.store_id] = (uCount[r.store_id] || 0) + 1; });
+    (recordsAgg.data || []).forEach((r: any) => { rCount[r.store_id] = (rCount[r.store_id] || 0) + 1; });
+    (ordersAgg.data || []).forEach((r: any) => { oRevenue[r.store_id] = (oRevenue[r.store_id] || 0) + Number(r.amount || 0); });
+    rows.forEach((r: any) => {
+      r._user_count = uCount[r.id] || 0;
+      r._record_count = rCount[r.id] || 0;
+      r._revenue = oRevenue[r.id] || 0;
+    });
+  }
+  return { rows, total: count || 0 };
 }
 
 export async function upsertStore(input: StoreInput) {

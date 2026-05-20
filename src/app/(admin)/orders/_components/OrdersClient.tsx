@@ -24,7 +24,7 @@ const PAY_STATUS_OPTIONS: Record<string, { label: string; variant: any }> = {
 };
 
 export function OrdersClient({
-  initialRows, initialTotal, initialQ, initialPage, initialPayStatus, initialChannelId, initialChannelName
+  initialRows, initialTotal, initialQ, initialPage, initialPayStatus, initialChannelId, initialChannelName, initialStoreId, initialStoreName
 }: {
   initialRows: any[];
   initialTotal: number;
@@ -33,6 +33,8 @@ export function OrdersClient({
   initialPayStatus: string;
   initialChannelId?: string | null;
   initialChannelName?: string | null;
+  initialStoreId?: string | null;
+  initialStoreName?: string | null;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState(initialRows);
@@ -42,40 +44,43 @@ export function OrdersClient({
   const [payStatus, setPayStatus] = useState(initialPayStatus);
   const [channelId, setChannelId] = useState<string | null>(initialChannelId || null);
   const [channelName] = useState<string | null>(initialChannelName || null);
+  const [storeId, setStoreId] = useState<string | null>(initialStoreId || null);
+  const [storeName] = useState<string | null>(initialStoreName || null);
   const [viewing, setViewing] = useState<any>(null);
   const [, start] = useTransition();
 
-  function reload(nextQ = q, nextPage = page, nextStatus = payStatus, nextChannel = channelId) {
+  function reload(nextQ = q, nextPage = page, nextStatus = payStatus, nextChannel = channelId, nextStore = storeId) {
     start(async () => {
       const { rows: r, total: t } = await listOrders({
         q: nextQ,
         page: nextPage,
         pay_status: nextStatus || undefined,
         channel_id: nextChannel,
+        store_id: nextStore,
         pageSize: 20
       });
       setRows(r); setTotal(t);
     });
   }
 
-  function clearChannelFilter() {
-    setChannelId(null); setPage(1);
+  function clearAllFilters() {
+    setChannelId(null); setStoreId(null); setPage(1);
     const sp = new URLSearchParams();
     if (payStatus) sp.set("pay_status", payStatus);
     if (q) sp.set("q", q);
     router.replace(`/orders${sp.toString() ? "?" + sp.toString() : ""}`);
-    reload(q, 1, payStatus, null);
+    reload(q, 1, payStatus, null, null);
   }
 
   function onSearch(v: string) {
     setQ(v); setPage(1);
-    reload(v, 1, payStatus, channelId);
+    reload(v, 1, payStatus, channelId, storeId);
   }
 
   function onStatusChange(v: string) {
     const next = v === "__all__" ? "" : v;
     setPayStatus(next); setPage(1);
-    reload(q, 1, next, channelId);
+    reload(q, 1, next, channelId, storeId);
   }
 
   function onExport() {
@@ -117,13 +122,14 @@ export function OrdersClient({
           }
         />
 
-        {channelName && (
+        {(channelName || storeName) && (
           <div className="-mt-1 mb-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-accent/40 px-3 py-2 text-xs">
             <Filter className="h-3.5 w-3.5 text-primary" />
-            <span className="text-muted-foreground">已筛选渠道：</span>
-            <Badge variant="default" className="font-medium">{channelName}</Badge>
+            <span className="text-muted-foreground">已筛选：</span>
+            {channelName && <Badge variant="default" className="font-medium">渠道 · {channelName}</Badge>}
+            {storeName && <Badge variant="default" className="font-medium">店铺 · {storeName}</Badge>}
             <button
-              onClick={clearChannelFilter}
+              onClick={clearAllFilters}
               className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
             >
               <X className="h-3 w-3" /> 清除筛选
@@ -186,7 +192,7 @@ export function OrdersClient({
         )}
       </div>
 
-      <Pagination page={page} pageSize={20} total={total} onChange={p => { setPage(p); reload(q, p, payStatus, channelId); }} />
+      <Pagination page={page} pageSize={20} total={total} onChange={p => { setPage(p); reload(q, p, payStatus, channelId, storeId); }} />
 
       <OrderDetailDialog
         open={!!viewing}

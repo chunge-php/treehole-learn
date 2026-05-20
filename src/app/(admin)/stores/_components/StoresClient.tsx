@@ -10,8 +10,9 @@ import { Pagination } from "@/components/admin/Pagination";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
-import { formatDateCN } from "@/lib/utils";
-import { MoreHorizontal, Pencil, Trash2, Power, Store, X, Filter } from "lucide-react";
+import Link from "next/link";
+import { formatDateCN, formatMoney } from "@/lib/utils";
+import { MoreHorizontal, Pencil, Trash2, Power, Store, X, Filter, Users, ClipboardList, Smartphone, TrendingUp } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
@@ -78,7 +79,10 @@ export function StoresClient({
       地址: r.address || "",
       联系人: r.contact_name || "",
       联系电话: r.contact_phone || "",
+      用户数量: r._user_count ?? 0,
+      测评人次: r._record_count ?? 0,
       设备数: r.device_count ?? 0,
+      销售金额: Number(r._revenue || 0).toFixed(2),
       状态: r.status === "active" ? "正常" : "停用",
       创建时间: formatDateCN(r.created_at)
     }));
@@ -148,10 +152,11 @@ export function StoresClient({
                 <TableHead>店铺</TableHead>
                 <TableHead>所属渠道</TableHead>
                 <TableHead>归属地区</TableHead>
-                <TableHead>联系人</TableHead>
-                <TableHead>设备数</TableHead>
+                <TableHead className="text-center">用户数</TableHead>
+                <TableHead className="text-center">测评人次</TableHead>
+                <TableHead className="text-center">设备数</TableHead>
+                <TableHead className="text-right">销售金额</TableHead>
                 <TableHead>状态</TableHead>
-                <TableHead>创建时间</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
@@ -160,7 +165,11 @@ export function StoresClient({
                 <TableRow key={r.id}>
                   <TableCell>
                     <div className="font-medium">{r.name}</div>
-                    <div className="text-[11px] text-muted-foreground font-mono">#{r.seq_no}</div>
+                    {r.contact_name && (
+                      <div className="text-[11px] text-muted-foreground">
+                        {r.contact_name}{r.contact_phone ? ` · ${r.contact_phone}` : ""}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>
                     {r.channels?.name ? <Badge variant="outline">{r.channels.name}</Badge> : <span className="text-muted-foreground text-xs">—</span>}
@@ -168,17 +177,37 @@ export function StoresClient({
                   <TableCell className="text-sm text-muted-foreground">
                     {[r.province, r.city, r.district].filter(Boolean).join(" · ") || "—"}
                   </TableCell>
-                  <TableCell>
-                    {r.contact_name ? (
-                      <div className="text-sm">
-                        {r.contact_name}
-                        <div className="text-[11px] text-muted-foreground">{r.contact_phone}</div>
-                      </div>
-                    ) : <span className="text-muted-foreground text-xs">—</span>}
+                  <TableCell className="text-center">
+                    <Link
+                      href={`/end-users?store_id=${r.id}`}
+                      className="group inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm tabular-nums font-medium transition-colors hover:bg-primary/10 hover:text-primary"
+                    >
+                      <Users className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary" />
+                      {r._user_count ?? 0}
+                    </Link>
                   </TableCell>
-                  <TableCell className="text-sm tabular-nums">{r.device_count ?? 0}</TableCell>
+                  <TableCell className="text-center text-sm tabular-nums text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5">
+                      <ClipboardList className="h-3.5 w-3.5" />
+                      {r._record_count ?? 0}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-center text-sm tabular-nums text-muted-foreground">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Smartphone className="h-3.5 w-3.5" />
+                      {r.device_count ?? 0}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Link
+                      href={`/orders?store_id=${r.id}`}
+                      className="group inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm tabular-nums font-semibold transition-colors hover:bg-primary/10 hover:text-primary"
+                    >
+                      <TrendingUp className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary" />
+                      {formatMoney(r._revenue || 0)}
+                    </Link>
+                  </TableCell>
                   <TableCell><StatusBadge status={r.status} /></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{formatDateCN(r.created_at)}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

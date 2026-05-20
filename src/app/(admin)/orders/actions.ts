@@ -7,6 +7,7 @@ export async function listOrders(params: {
   q?: string;
   pay_status?: string;
   channel_id?: string | null;
+  store_id?: string | null;
   page?: number;
   pageSize?: number;
 }) {
@@ -24,6 +25,7 @@ export async function listOrders(params: {
   if (scope) qb = qb.eq("channel_id", scope);
   else if (params.channel_id) qb = qb.eq("channel_id", params.channel_id);
 
+  if (params.store_id) qb = qb.eq("store_id", params.store_id);
   if (params.q) qb = qb.ilike("order_no", `%${params.q}%`);
   if (params.pay_status) qb = qb.eq("pay_status", params.pay_status);
 

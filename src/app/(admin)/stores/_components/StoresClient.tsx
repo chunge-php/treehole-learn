@@ -180,8 +180,17 @@ export function StoresClient({
                   <TableCell>
                     {r.channels?.name ? <Badge variant="outline">{r.channels.name}</Badge> : <span className="text-muted-foreground text-xs">—</span>}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {[r.province, r.city, r.district].filter(Boolean).join(" · ") || "—"}
+                  <TableCell className="text-sm">
+                    {(() => {
+                      const region = [r.province, r.city, r.district].filter(Boolean).join(" · ");
+                      if (!region && !r.address) return <span className="text-muted-foreground">—</span>;
+                      return (
+                        <div className="space-y-0.5">
+                          {region && <div className="text-muted-foreground">{region}</div>}
+                          {r.address && <div className="text-xs text-foreground/80 max-w-[18rem] truncate" title={r.address}>{r.address}</div>}
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="text-center">
                     <Link

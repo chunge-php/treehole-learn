@@ -67,7 +67,7 @@ export function OrdersClient({
       订单号: r.order_no,
       渠道: r.channels?.name || "",
       店铺: r.stores?.name || "",
-      用户: r.end_users?.nickname || "",
+      用户: r.end_users?.name || "",
       用户电话: r.end_users?.phone || "",
       金额: Number(r.amount || 0).toFixed(2),
       支付状态: PAY_STATUS_OPTIONS[r.pay_status]?.label || r.pay_status,
@@ -134,7 +134,7 @@ export function OrdersClient({
                     <TableCell className="text-sm">{r.channels?.name || "—"}</TableCell>
                     <TableCell className="text-sm">{r.stores?.name || "—"}</TableCell>
                     <TableCell className="text-sm">
-                      {r.end_users?.nickname || "—"}
+                      {r.end_users?.name || "—"}
                       {r.end_users?.phone && (
                         <div className="text-[11px] text-muted-foreground">{r.end_users.phone}</div>
                       )}

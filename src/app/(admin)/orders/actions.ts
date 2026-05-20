@@ -17,7 +17,7 @@ export async function listOrders(params: {
 
   let qb = sb
     .from("orders")
-    .select("*, channels(name), stores(name), end_users(nickname, phone)", { count: "exact" });
+    .select("*, channels(name), stores(name), end_users(name, phone)", { count: "exact" });
 
   const scope = scopedChannelFilter(s);
   if (scope === "__none__") return { rows: [], total: 0 };
@@ -38,7 +38,7 @@ export async function getOrderDetail(id: string) {
   const sb = adminSupabase();
   const { data, error } = await sb
     .from("orders")
-    .select("*, channels(name), stores(name), end_users(nickname, phone)")
+    .select("*, channels(name), stores(name), end_users(name, phone)")
     .eq("id", id)
     .single();
   if (error) throw new Error(error.message);

@@ -48,7 +48,7 @@ export function OrderDetailDialog({ open, onOpenChange, order }: {
             <Separator className="my-2" />
             <Row label="所属渠道" value={order.channels?.name} />
             <Row label="所属店铺" value={order.stores?.name} />
-            <Row label="下单用户" value={order.end_users?.nickname} />
+            <Row label="下单用户" value={order.end_users?.name} />
             <Row label="用户电话" value={order.end_users?.phone} />
             <Separator className="my-2" />
             <Row label="创建时间" value={formatDateCN(order.created_at)} />

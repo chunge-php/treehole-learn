@@ -4,19 +4,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { DataToolbar } from "@/components/admin/DataToolbar";
 import { Pagination } from "@/components/admin/Pagination";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
-import { MoreHorizontal, Pencil, Trash2, Power, ClipboardList, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Power, ClipboardList, Image as ImageIcon, Video as VideoIcon, AlertTriangle, Loader2 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { AssessmentForm } from "./AssessmentForm";
 import { ImportDialog } from "./ImportDialog";
-import { deleteAssessment, toggleAssessmentStatus, listAssessments } from "../actions";
+import { deleteAssessment, toggleAssessmentStatus, listAssessments, clearAllAssessments } from "../actions";
 import { DIMENSIONS, QTYPES, DIMENSION_VARIANT, QTYPE_VARIANT } from "./constants";
 import { downloadExcel } from "@/lib/excel";
 import { toast } from "sonner";
@@ -40,6 +43,9 @@ export function AssessmentsClient({
   const [editing, setEditing] = useState<any>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [delTarget, setDelTarget] = useState<any>(null);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearText, setClearText] = useState("");
+  const [clearPending, startClear] = useTransition();
   const [, start] = useTransition();
 
   function reload(nextQ = q, nextPage = page, nextDim = dimension, nextQt = qtype) {
@@ -104,6 +110,21 @@ export function AssessmentsClient({
     }
   }
 
+  function submitClear() {
+    if (clearText !== "确认清空") { toast.error("请输入'确认清空'"); return; }
+    startClear(async () => {
+      try {
+        const r = await clearAllAssessments(clearText);
+        toast.success(`已清空 ${r.removed} 条测评题`);
+        setClearOpen(false); setClearText("");
+        setPage(1);
+        reload(q, 1);
+      } catch (e: any) {
+        toast.error(e?.message || "清空失败");
+      }
+    });
+  }
+
   return (
     <Card className="overflow-hidden">
       <div className="p-4">
@@ -127,6 +148,17 @@ export function AssessmentsClient({
                 emptyText="无匹配"
                 clearable
               />
+              {total > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => { setClearText(""); setClearOpen(true); }}
+                  title="清空所有测评题 (用于导错重置)"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> 清空
+                </Button>
+              )}
               <Combobox
                 options={QTYPES.map(q => ({ value: q, label: q }))}
                 value={qtype}
@@ -255,6 +287,43 @@ export function AssessmentsClient({
         destructive
         onConfirm={onDelete}
       />
+
+      {/* 清空全部弹窗 (需输入'确认清空' 才能执行) */}
+      <Dialog open={clearOpen} onOpenChange={v => { setClearOpen(v); if (!v) setClearText(""); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <DialogTitle className="mt-2">清空所有测评题</DialogTitle>
+            <DialogDescription className="leading-relaxed">
+              将删除当前数据库中全部 <b className="text-destructive tabular-nums">{total}</b> 条测评题, 此操作 <b>不可恢复</b>。
+              <br />关联的测评作答记录 (assessment_records) 会被自动清空。
+              <br />继续请输入 <code className="font-mono text-destructive">确认清空</code>:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Input
+              value={clearText}
+              onChange={e => setClearText(e.target.value)}
+              placeholder="确认清空"
+              autoFocus
+              className="font-mono"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearOpen(false)} disabled={clearPending}>取消</Button>
+            <Button
+              variant="destructive"
+              onClick={submitClear}
+              disabled={clearText !== "确认清空" || clearPending}
+            >
+              {clearPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              确认清空全部
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

@@ -13,7 +13,8 @@ import { EmptyState } from "@/components/admin/EmptyState";
 import Link from "next/link";
 import { formatDateCN, formatMoney } from "@/lib/utils";
 import { Combobox } from "@/components/ui/combobox";
-import { MoreHorizontal, Pencil, Trash2, Power, Store, Users, ClipboardList, Smartphone, TrendingUp } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Power, Store, Users, ClipboardList, Smartphone, TrendingUp, AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
@@ -65,6 +66,7 @@ export function StoresClient({
   }
 
   const channelOptions = channels.map(c => ({ value: c.id, label: c.name }));
+  const orphanCount = rows.filter(r => !r.channel_id).length;
 
   function onSearch(v: string) {
     setQ(v); setPage(1);
@@ -145,6 +147,13 @@ export function StoresClient({
           }
         />
 
+        {orphanCount > 0 && !isChannelAdmin && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-xs">
+            <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
+            <span>当前页有 <span className="font-semibold text-warning">{orphanCount}</span> 个店铺未关联渠道, 已置顶显示</span>
+          </div>
+        )}
+
         {rows.length === 0 ? (
           <EmptyState
             icon={Store}
@@ -167,9 +176,14 @@ export function StoresClient({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(r => (
-                <TableRow key={r.id}>
-                  <TableCell>
+              {rows.map(r => {
+                const isOrphan = !r.channel_id;
+                return (
+                <TableRow
+                  key={r.id}
+                  className={cn(isOrphan && "bg-warning/5 hover:bg-warning/10")}
+                >
+                  <TableCell className={cn(isOrphan && "border-l-2 border-warning")}>
                     <div className="font-medium">{r.name}</div>
                     {r.contact_name && (
                       <div className="text-[11px] text-muted-foreground">
@@ -178,7 +192,13 @@ export function StoresClient({
                     )}
                   </TableCell>
                   <TableCell>
-                    {r.channels?.name ? <Badge variant="outline">{r.channels.name}</Badge> : <span className="text-muted-foreground text-xs">—</span>}
+                    {r.channels?.name ? (
+                      <Badge variant="outline">{r.channels.name}</Badge>
+                    ) : (
+                      <Badge variant="warning" className="gap-1">
+                        <AlertTriangle className="h-3 w-3" /> 未关联渠道
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-sm">
                     {(() => {
@@ -243,7 +263,8 @@ export function StoresClient({
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         )}
@@ -268,7 +289,7 @@ export function StoresClient({
         open={!!delTarget}
         onOpenChange={v => !v && setDelTarget(null)}
         title="删除店铺"
-        description={`确定要删除「${delTarget?.name}」吗？该店铺下所有终端用户、订单数据都将一并删除。`}
+        description={`确定要删除「${delTarget?.name}」吗？\n· 此店铺下的用户/订单/测评记录将保留 (store_id 变空)\n· 仅删除店铺本身的记录`}
         confirmText="确认删除"
         destructive
         onConfirm={onDelete}

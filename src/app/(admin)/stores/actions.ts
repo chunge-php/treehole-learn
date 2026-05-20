@@ -62,7 +62,11 @@ export async function listStores(params: { q?: string; status?: string; channel_
 
   if (params.q) qb = qb.ilike("name", `%${params.q}%`);
   if (params.status) qb = qb.eq("status", params.status);
-  qb = qb.order("created_at", { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1);
+  // 未关联渠道的孤儿数据排在最前面, 便于管理员及时处理
+  qb = qb
+    .order("channel_id", { ascending: true, nullsFirst: true })
+    .order("created_at", { ascending: false })
+    .range((page - 1) * pageSize, page * pageSize - 1);
 
   const { data, count, error } = await qb;
   if (error) throw new Error(error.message);

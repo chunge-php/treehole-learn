@@ -171,6 +171,9 @@ export async function getChannelAdmins(channel_id: string) {
 export async function deleteChannel(id: string) {
   requireAdmin();
   const sb = adminSupabase();
+  // 先删关联的渠道管理员账号 (其他 role 即使 channel_id 一致也保留 — 仅清理 channel_admin)
+  await sb.from("accounts").delete().eq("channel_id", id).eq("role", "channel_admin");
+  // 删渠道 — FK SET NULL 会自动把 stores/end_users/assessment_records 的 channel_id 置空
   const { error } = await sb.from("channels").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/channels");

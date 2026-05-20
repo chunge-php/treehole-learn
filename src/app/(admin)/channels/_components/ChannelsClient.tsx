@@ -216,7 +216,7 @@ export function ChannelsClient({
         open={!!delTarget}
         onOpenChange={v => !v && setDelTarget(null)}
         title="删除渠道商"
-        description={`确定要删除「${delTarget?.name}」吗？该渠道下所有店铺、用户、订单都将一并删除。`}
+        description={`确定要删除「${delTarget?.name}」吗？\n· 此渠道的店铺/用户/订单/测评记录将保留 (关联字段变为「未关联」)\n· 此渠道的登录账号会被一并删除`}
         confirmText="确认删除"
         destructive
         onConfirm={onDelete}

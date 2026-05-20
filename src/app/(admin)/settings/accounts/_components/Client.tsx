@@ -17,7 +17,7 @@ import { EmptyState } from "@/components/admin/EmptyState";
 import { formatDateCN } from "@/lib/utils";
 import { MoreHorizontal, Pencil, Trash2, Power, KeyRound, Users, Loader2, Filter, X } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
 import { Form } from "./Form";
 import { deleteAccount, listAccounts, resetPassword, toggleAccountStatus } from "../actions";
@@ -215,6 +215,8 @@ export function Client({
                           <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuLabel className="truncate max-w-[14rem]">@{r.username} · {r.display_name}</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem onSelect={() => onEdit(r)}>
                             <Pencil className="h-3.5 w-3.5" /> 编辑
                           </DropdownMenuItem>

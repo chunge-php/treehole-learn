@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/admin/EmptyState";
 import { formatDateCN } from "@/lib/utils";
 import { MoreHorizontal, Pencil, Trash2, Power, Library, FileText, Video, File as FileIcon } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
 import { ResourceForm } from "./ResourceForm";
 import { ImportDialog } from "./ImportDialog";
@@ -201,6 +201,8 @@ export function ResourcesClient({
                           <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuLabel className="truncate max-w-[16rem]">「{r.title}」</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem onSelect={() => onEdit(r)}>
                             <Pencil className="h-3.5 w-3.5" /> 编辑
                           </DropdownMenuItem>

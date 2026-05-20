@@ -14,6 +14,7 @@ export function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; on
         "题型填中文 (单选题/判断题/语音题); 语音题无需选项与答案\n" +
         "题目内容可用 JSON 数组 [{\"label\":\"选项\",\"value\":\"A\"}] 或竖线分隔 选项1|选项2\n" +
         "答案填选项的 value (单选填 A/B/C, 判断填 T 或 F), 量表题可留空\n" +
+        "题目文件多个 URL 用逗号分隔, 文件类型按扩展名自动识别 (jpg/png/mp4 等)\n" +
         "序号留空时自动分配 (按当前最大值 +1)"
       }
       templateFields={[
@@ -24,6 +25,7 @@ export function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; on
         { key: "qtype", label: "题型", example: "单选题" },
         { key: "options", label: "题目内容", example: '[{"label":"反复思考","value":"A"},{"label":"换题再说","value":"B"}]' },
         { key: "answer", label: "答案", example: "A" },
+        { key: "media_urls", label: "题目文件", example: "https://example.com/img1.jpg,https://example.com/video.mp4" },
         { key: "project_name", label: "所属项目", example: "学习态度初探" },
         { key: "sort_order", label: "序号", example: "" }
       ]}

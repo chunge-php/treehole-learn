@@ -62,7 +62,7 @@ export function StoreForm({
 
   function submit() {
     if (!form.name.trim()) { toast.error("请填写店铺名称"); return; }
-    if (!form.channel_id && !isChannelAdmin) { toast.error("请选择所属渠道"); return; }
+    // admin 允许不关联渠道; channel_admin 由后端兜底锁定
     start(async () => {
       try {
         await upsertStore(form);
@@ -90,14 +90,19 @@ export function StoreForm({
               <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="例：海淀中关村学习中心" />
             </div>
             <div className="space-y-1.5">
-              <Label>所属渠道 <span className="text-destructive">*</span></Label>
+              <Label>所属渠道 {isChannelAdmin && <span className="text-destructive">*</span>}</Label>
               <Select
-                value={form.channel_id || ""}
-                onValueChange={v => setForm({ ...form, channel_id: v || null })}
+                value={form.channel_id || "__none__"}
+                onValueChange={v => setForm({ ...form, channel_id: v === "__none__" ? null : v })}
                 disabled={channelLocked}
               >
                 <SelectTrigger><SelectValue placeholder="请选择渠道" /></SelectTrigger>
                 <SelectContent>
+                  {!isChannelAdmin && (
+                    <SelectItem value="__none__">
+                      <span className="text-muted-foreground">— 暂不关联渠道</span>
+                    </SelectItem>
+                  )}
                   {channels.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>

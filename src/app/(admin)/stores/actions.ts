@@ -68,12 +68,15 @@ export async function upsertStore(input: StoreInput) {
   const s = requireSession();
   const sb = adminSupabase();
 
-  // channel_admin 强制锁死自己渠道；admin 优先用 acting，否则用表单传入
+  // channel_admin 强制锁死自己渠道；admin 优先用 acting，否则用表单传入(允许为 null)
   const channel_id = s.role === "channel_admin"
     ? s.channel_id
     : (scopedWriteChannelId(s) || input.channel_id || null);
 
-  if (!channel_id) throw new Error("请选择所属渠道");
+  // channel_admin 必须有自己的 channel_id; admin 可以创建无关联店铺
+  if (s.role === "channel_admin" && !channel_id) {
+    throw new Error("无法识别您的渠道归属");
+  }
 
   const payload = {
     channel_id,
@@ -150,14 +153,13 @@ export async function bulkImportStores(rows: Record<string, any>[]) {
     let channel_id: string | null = lockedChannelId || null;
     if (!channel_id) {
       const chName = String(r["所属渠道名称"] || r["channel_name"] || "").trim();
-      if (!chName) {
-        errors.push({ row: i + 2, message: "所属渠道名称为空" });
-        continue;
-      }
-      channel_id = channelMap.get(chName) || null;
-      if (!channel_id) {
-        errors.push({ row: i + 2, message: `渠道「${chName}」不存在` });
-        continue;
+      // admin 模式下允许留空 (创建无关联渠道的店铺)
+      if (chName) {
+        channel_id = channelMap.get(chName) || null;
+        if (!channel_id) {
+          errors.push({ row: i + 2, message: `渠道「${chName}」不存在` });
+          continue;
+        }
       }
     }
 

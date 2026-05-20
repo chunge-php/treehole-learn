@@ -47,19 +47,29 @@ export async function upsertEndUser(input: EndUserInput) {
   const s = requireSession();
   const sb = adminSupabase();
 
-  if (!input.store_id) throw new Error("请选择所属店铺");
+  // channel_admin 必须指定店铺; admin 可以创建无关联用户
+  if (s.role === "channel_admin" && !input.store_id) {
+    throw new Error("请选择所属店铺");
+  }
 
-  // 反查 store → channel_id；同时校验 channel_admin 权限
-  const { data: store, error: stErr } = await sb.from("stores").select("id, channel_id").eq("id", input.store_id).maybeSingle();
-  if (stErr) throw new Error(stErr.message);
-  if (!store) throw new Error("所属店铺不存在");
-  if (s.role === "channel_admin" && store.channel_id !== s.channel_id) {
-    throw new Error("无权操作其它渠道下的店铺");
+  let store_id: string | null = null;
+  let channel_id: string | null = null;
+
+  if (input.store_id) {
+    // 反查 store → channel_id; 同时校验 channel_admin 权限
+    const { data: store, error: stErr } = await sb.from("stores").select("id, channel_id").eq("id", input.store_id).maybeSingle();
+    if (stErr) throw new Error(stErr.message);
+    if (!store) throw new Error("所属店铺不存在");
+    if (s.role === "channel_admin" && store.channel_id !== s.channel_id) {
+      throw new Error("无权操作其它渠道下的店铺");
+    }
+    store_id = store.id;
+    channel_id = store.channel_id;
   }
 
   const payload = {
-    store_id: store.id,
-    channel_id: store.channel_id,
+    store_id,
+    channel_id,
     name: input.name,
     phone: input.phone,
     gender: input.gender,
@@ -126,23 +136,27 @@ export async function bulkImportEndUsers(rows: Record<string, any>[]) {
       continue;
     }
     const storeName = String(r["所属店铺名称"] || r["store_name"] || "").trim();
-    if (!storeName) {
+    let store: { id: string; channel_id: string } | null = null;
+    if (storeName) {
+      store = storeMap.get(storeName) || null;
+      if (!store) {
+        errors.push({ row: i + 2, message: `店铺「${storeName}」不存在或无权操作` });
+        continue;
+      }
+    } else if (s.role === "channel_admin") {
+      // 渠道商必须指定店铺
       errors.push({ row: i + 2, message: "所属店铺名称为空" });
       continue;
     }
-    const store = storeMap.get(storeName);
-    if (!store) {
-      errors.push({ row: i + 2, message: `店铺「${storeName}」不存在或无权操作` });
-      continue;
-    }
+    // admin 留空 → 创建无关联用户
 
     const rawGender = String(r["性别"] || r["gender"] || "").trim();
     const gender = rawGender ? (genderMap[rawGender] || null) : null;
 
     const { error } = await sb.from("end_users").insert({
       id: shortId("eu"),
-      store_id: store.id,
-      channel_id: store.channel_id,
+      store_id: store?.id || null,
+      channel_id: store?.channel_id || null,
       name,
       phone: r["电话"] || r["phone"] || null,
       gender,

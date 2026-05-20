@@ -69,7 +69,7 @@ export function EndUserForm({
 
   function submit() {
     if (!form.name.trim()) { toast.error("请填写姓名"); return; }
-    if (!form.store_id) { toast.error("请选择所属店铺"); return; }
+    // 店铺非必填; 渠道商角色由后端兜底校验
     start(async () => {
       try {
         await upsertEndUser(form);
@@ -95,15 +95,23 @@ export function EndUserForm({
               <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="学生姓名" />
             </div>
             <div className="space-y-1.5">
-              <Label>所属店铺 <span className="text-destructive">*</span></Label>
-              <Select value={form.store_id || ""} onValueChange={v => setForm({ ...form, store_id: v })}>
+              <Label>所属店铺</Label>
+              <Select
+                value={form.store_id || "__none__"}
+                onValueChange={v => setForm({ ...form, store_id: v === "__none__" ? "" : v })}
+              >
                 <SelectTrigger><SelectValue placeholder="请选择店铺" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">— 暂不关联店铺</span>
+                  </SelectItem>
                   {stores.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              {selectedStore?.channels?.name && (
+              {selectedStore?.channels?.name ? (
                 <div className="text-[11px] text-muted-foreground">归属渠道：{selectedStore.channels.name}</div>
+              ) : (
+                form.store_id === "" && <div className="text-[11px] text-muted-foreground">不关联店铺时也将无关联渠道（仅管理员）</div>
               )}
             </div>
           </div>

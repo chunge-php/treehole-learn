@@ -53,6 +53,34 @@ export async function listEndUsers(params: { q?: string; store_id?: string | nul
     const { login_password_hash, ...rest } = r;
     return { ...rest, _has_login_password: !!login_password_hash };
   });
+
+  // 附加聚合: 家长昵称 / 本周未完成作业数
+  const ids = rows.map((r: any) => r.id);
+  if (ids.length > 0) {
+    // 本周一 (周一为一周起点) → 本周日
+    const now = new Date();
+    const day = (now.getDay() + 6) % 7; // 周一=0
+    const monday = new Date(now); monday.setDate(now.getDate() - day); monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+    const [parentsRes, tasksRes] = await Promise.all([
+      sb.from("parent_bindings").select("end_user_id, nickname").in("end_user_id", ids).order("created_at", { ascending: false }),
+      sb.from("assignments").select("end_user_id")
+        .in("end_user_id", ids)
+        .is("completed_at", null)
+        .lte("start_date", fmt(sunday))
+        .gte("end_date", fmt(monday))
+    ]);
+    const parentMap: Record<string, string> = {};
+    (parentsRes.data || []).forEach((p: any) => { if (!parentMap[p.end_user_id]) parentMap[p.end_user_id] = p.nickname; });
+    const taskMap: Record<string, number> = {};
+    (tasksRes.data || []).forEach((t: any) => { taskMap[t.end_user_id] = (taskMap[t.end_user_id] || 0) + 1; });
+    rows.forEach((r: any) => {
+      r._parent_nickname = parentMap[r.id] || null;
+      r._pending_tasks = taskMap[r.id] || 0;
+    });
+  }
   return { rows, total: count || 0 };
 }
 

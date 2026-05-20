@@ -11,7 +11,8 @@ import { Pagination } from "@/components/admin/Pagination";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
 import { formatDateCN } from "@/lib/utils";
-import { MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Users, ClipboardList } from "lucide-react";
+import { AssignmentsDialog } from "./AssignmentsDialog";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
@@ -49,6 +50,7 @@ export function EndUsersClient({
   const [editing, setEditing] = useState<any>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [delTarget, setDelTarget] = useState<any>(null);
+  const [assignTarget, setAssignTarget] = useState<any>(null);
   const [, start] = useTransition();
 
   // 店铺下拉随渠道联动
@@ -196,6 +198,8 @@ export function EndUsersClient({
                 <TableHead>渠道</TableHead>
                 <TableHead>登录账号</TableHead>
                 <TableHead>关联手机号</TableHead>
+                <TableHead>家长</TableHead>
+                <TableHead>本周待办</TableHead>
                 <TableHead>注册时间</TableHead>
                 <TableHead>最近登录</TableHead>
                 <TableHead className="text-right">操作</TableHead>
@@ -222,6 +226,16 @@ export function EndUsersClient({
                   <TableCell className="text-sm font-mono text-xs">
                     {r.phone || <span className="text-muted-foreground">—</span>}
                   </TableCell>
+                  <TableCell className="text-xs">
+                    {r._parent_nickname
+                      ? <span className="text-foreground">{r._parent_nickname}</span>
+                      : <span className="text-muted-foreground">未绑定</span>}
+                  </TableCell>
+                  <TableCell>
+                    {r._pending_tasks > 0
+                      ? <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400">{r._pending_tasks}</Badge>
+                      : <span className="text-muted-foreground text-xs">—</span>}
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDateCN(r.created_at)}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {r.last_login_at ? formatDateCN(r.last_login_at) : <span className="opacity-60">从未登录</span>}
@@ -236,6 +250,9 @@ export function EndUsersClient({
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => onEdit(r)}>
                           <Pencil className="h-3.5 w-3.5" /> 编辑
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setAssignTarget(r)}>
+                          <ClipboardList className="h-3.5 w-3.5" /> 作业管理
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => setDelTarget(r)} className="text-destructive focus:text-destructive">
@@ -264,6 +281,11 @@ export function EndUsersClient({
         open={importOpen}
         onOpenChange={setImportOpen}
         onDone={() => reload()}
+      />
+      <AssignmentsDialog
+        target={assignTarget}
+        onOpenChange={v => !v && setAssignTarget(null)}
+        onChanged={() => reload()}
       />
       <ConfirmDialog
         open={!!delTarget}

@@ -24,6 +24,7 @@ export type AssessmentInput = {
   dimension: AssessmentDimension;
   qtype: AssessmentQType;
   options?: AssessmentOption[] | null;
+  answer?: string | null;
   sort_order: number;
   status?: "active" | "disabled";
 };
@@ -104,6 +105,7 @@ export async function upsertAssessment(input: AssessmentInput) {
     dimension: input.dimension,
     qtype: input.qtype,
     options: input.qtype === "语音题" ? [] : (input.options || []),
+    answer: input.qtype === "语音题" ? null : ((input.answer || "").trim() || null),
     sort_order: input.sort_order,
     status: input.status || "active"
   };
@@ -198,6 +200,8 @@ export async function bulkImportAssessments(rows: Record<string, any>[]) {
     sortSet.add(sortOrder);
     nextSort = Math.max(nextSort, sortOrder + 1);
 
+    const answer = qtype === "语音题" ? null : (String(r["答案"] || r["answer"] || "").trim() || null);
+
     const { error } = await sb.from("assessments").insert({
       id: shortId("as"),
       title,
@@ -208,6 +212,7 @@ export async function bulkImportAssessments(rows: Record<string, any>[]) {
       dimension,
       qtype,
       options,
+      answer,
       sort_order: sortOrder,
       status: "active"
     });

@@ -50,6 +50,7 @@ export function AssessmentForm({
     options: Array.isArray(initial?.options) && initial.options.length
       ? initial.options
       : [{ label: "", value: "A" }, { label: "", value: "B" }],
+    answer: initial?.answer || "",
     sort_order: initial?.sort_order ?? 0,
     status: initial?.status || "active"
   });
@@ -77,6 +78,7 @@ export function AssessmentForm({
       options: Array.isArray(initial?.options) && initial.options.length
         ? initial.options
         : [{ label: "", value: "A" }, { label: "", value: "B" }],
+      answer: initial?.answer || "",
       sort_order: initial?.sort_order ?? 0,
       status: initial?.status || "active"
     });
@@ -260,32 +262,48 @@ export function AssessmentForm({
                 )}
               </div>
               <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
-                {(form.options || []).map((o, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <Badge variant="outline" className="font-mono w-8 justify-center shrink-0">{o.value || nextLetter(idx)}</Badge>
-                    <Input
-                      value={o.label}
-                      onChange={e => setOption(idx, { label: e.target.value })}
-                      placeholder={`选项 ${o.value || nextLetter(idx)} 内容`}
-                      className="flex-1 h-8"
-                    />
-                    <Input
-                      type="number"
-                      value={o.score ?? ""}
-                      onChange={e => setOption(idx, { score: e.target.value === "" ? undefined : Number(e.target.value) })}
-                      placeholder="分值"
-                      className="w-20 h-8"
-                      title="得分"
-                    />
-                    {form.qtype === "单选题" && (form.options?.length || 0) > 2 && (
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeOption(idx)} className="h-8 w-8">
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                {(form.options || []).map((o, idx) => {
+                  const v = o.value || nextLetter(idx);
+                  const isAnswer = form.answer === v;
+                  return (
+                    <div
+                      key={idx}
+                      className={cn(
+                        "flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors",
+                        isAnswer && "bg-success/10 ring-1 ring-success/30"
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="th-correct-answer"
+                        checked={isAnswer}
+                        onChange={() => setForm({ ...form, answer: v })}
+                        className="h-3.5 w-3.5 accent-success cursor-pointer"
+                        title="标记为正确答案"
+                      />
+                      <Badge
+                        variant={isAnswer ? "success" : "outline"}
+                        className="font-mono w-8 justify-center shrink-0"
+                      >{v}</Badge>
+                      <Input
+                        value={o.label}
+                        onChange={e => setOption(idx, { label: e.target.value })}
+                        placeholder={`选项 ${v} 内容`}
+                        className="flex-1 h-8"
+                      />
+                      {form.qtype === "单选题" && (form.options?.length || 0) > 2 && (
+                        <Button type="button" variant="ghost" size="icon" onClick={() => removeOption(idx)} className="h-8 w-8">
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
                 {form.qtype === "判断题" && (
-                  <p className="text-[11px] text-muted-foreground">判断题选项固定为 是 / 否, 可仅修改分值</p>
+                  <p className="text-[11px] text-muted-foreground">勾选左侧圆点标记正确答案</p>
+                )}
+                {form.qtype === "单选题" && !form.answer && (
+                  <p className="text-[11px] text-muted-foreground">点击选项左侧圆点标记一个为正确答案 (量表题可不选)</p>
                 )}
               </div>
             </div>

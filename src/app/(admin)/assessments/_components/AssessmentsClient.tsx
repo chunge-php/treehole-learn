@@ -70,6 +70,7 @@ export function AssessmentsClient({
       所属维度: r.dimension,
       题型: r.qtype,
       题目内容: r.options ? JSON.stringify(r.options) : "",
+      答案: r.answer || "",
       题目文件数: Array.isArray(r.media_urls) ? r.media_urls.length : 0,
       所属项目: r.project_name || "",
       状态: r.status === "active" ? "正常" : "停用"

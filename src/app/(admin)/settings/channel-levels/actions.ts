@@ -11,6 +11,22 @@ export type ChannelLevelInput = {
   remark?: string | null;
 };
 
+/** 实时校验渠道级别名称是否可用 */
+export async function checkChannelLevelNameAvailable(
+  name: string,
+  excludeId?: string
+): Promise<{ ok: boolean; reason?: string }> {
+  requireAdmin();
+  const n = (name || "").trim();
+  if (!n) return { ok: false, reason: "名称不能为空" };
+  const sb = adminSupabase();
+  let qb = sb.from("channel_levels").select("id").eq("name", n).limit(1);
+  if (excludeId) qb = qb.neq("id", excludeId);
+  const { data } = await qb.maybeSingle();
+  if (data) return { ok: false, reason: "已存在同名级别" };
+  return { ok: true };
+}
+
 export async function listChannelLevels() {
   requireAdmin();
   const sb = adminSupabase();
@@ -26,9 +42,18 @@ export async function listChannelLevels() {
 export async function upsertChannelLevel(input: ChannelLevelInput) {
   requireAdmin();
   const sb = adminSupabase();
+  const n = (input.name || "").trim();
+  if (!n) throw new Error("请填写名称");
+
+  // 唯一性预检 (排除自己)
+  let dupQ = sb.from("channel_levels").select("id").eq("name", n).limit(1);
+  if (input.id) dupQ = dupQ.neq("id", input.id);
+  const { data: dup } = await dupQ.maybeSingle();
+  if (dup) throw new Error(`渠道级别「${n}」已存在`);
+
   if (input.id) {
     const { error } = await sb.from("channel_levels").update({
-      name: input.name,
+      name: n,
       rank: input.rank ?? 0,
       remark: input.remark
     }).eq("id", input.id);
@@ -37,7 +62,7 @@ export async function upsertChannelLevel(input: ChannelLevelInput) {
     const id = shortId("lv");
     const { error } = await sb.from("channel_levels").insert({
       id,
-      name: input.name,
+      name: n,
       rank: input.rank ?? 0,
       remark: input.remark
     });

@@ -29,7 +29,25 @@ export async function listChannels(params: { q?: string; status?: string; page?:
   qb = qb.order("created_at", { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1);
   const { data, count, error } = await qb;
   if (error) throw new Error(error.message);
-  return { rows: data || [], total: count || 0 };
+  const rows = data || [];
+
+  // 附加店铺数 / 用户数
+  const ids = rows.map(r => r.id);
+  if (ids.length > 0) {
+    const [storesAgg, usersAgg] = await Promise.all([
+      sb.from("stores").select("channel_id").in("channel_id", ids),
+      sb.from("end_users").select("channel_id").in("channel_id", ids)
+    ]);
+    const stCount: Record<string, number> = {};
+    (storesAgg.data || []).forEach((r: any) => { stCount[r.channel_id] = (stCount[r.channel_id] || 0) + 1; });
+    const uCount: Record<string, number> = {};
+    (usersAgg.data || []).forEach((r: any) => { uCount[r.channel_id] = (uCount[r.channel_id] || 0) + 1; });
+    rows.forEach((r: any) => {
+      r._store_count = stCount[r.id] || 0;
+      r._user_count = uCount[r.id] || 0;
+    });
+  }
+  return { rows, total: count || 0 };
 }
 
 export async function upsertChannel(input: ChannelInput) {

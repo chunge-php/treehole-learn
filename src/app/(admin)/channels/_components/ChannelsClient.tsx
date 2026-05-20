@@ -10,8 +10,9 @@ import { Pagination } from "@/components/admin/Pagination";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
+import Link from "next/link";
 import { formatDateCN } from "@/lib/utils";
-import { MoreHorizontal, Pencil, Trash2, Power, Building2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Power, Building2, Store, Users } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
@@ -123,6 +124,8 @@ export function ChannelsClient({
                 <TableHead>级别</TableHead>
                 <TableHead>归属地区</TableHead>
                 <TableHead>联系人</TableHead>
+                <TableHead className="text-center">店铺</TableHead>
+                <TableHead className="text-center">用户</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>创建时间</TableHead>
                 <TableHead className="text-right">操作</TableHead>
@@ -148,6 +151,24 @@ export function ChannelsClient({
                         <div className="text-[11px] text-muted-foreground">{r.contact_phone}</div>
                       </div>
                     ) : <span className="text-muted-foreground text-xs">—</span>}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Link
+                      href={`/stores?channel_id=${r.id}`}
+                      className="group inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm tabular-nums font-medium transition-colors hover:bg-primary/10 hover:text-primary"
+                    >
+                      <Store className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary" />
+                      {r._store_count ?? 0}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Link
+                      href={`/end-users?channel_id=${r.id}`}
+                      className="group inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm tabular-nums font-medium transition-colors hover:bg-primary/10 hover:text-primary"
+                    >
+                      <Users className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary" />
+                      {r._user_count ?? 0}
+                    </Link>
                   </TableCell>
                   <TableCell><StatusBadge status={r.status} /></TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDateCN(r.created_at)}</TableCell>

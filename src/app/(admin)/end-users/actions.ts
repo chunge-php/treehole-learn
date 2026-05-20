@@ -21,7 +21,7 @@ export type EndUserInput = {
   remark?: string | null;
 };
 
-export async function listEndUsers(params: { q?: string; store_id?: string | null; page?: number; pageSize?: number }) {
+export async function listEndUsers(params: { q?: string; store_id?: string | null; channel_id?: string | null; page?: number; pageSize?: number }) {
   const s = requireSession();
   const sb = adminSupabase();
   const page = params.page || 1;
@@ -32,6 +32,7 @@ export async function listEndUsers(params: { q?: string; store_id?: string | nul
   const scope = scopedChannelFilter(s);
   if (scope === "__none__") return { rows: [], total: 0 };
   if (scope) qb = qb.eq("channel_id", scope);
+  else if (params.channel_id) qb = qb.eq("channel_id", params.channel_id);
 
   if (params.store_id) qb = qb.eq("store_id", params.store_id);
   if (params.q) qb = qb.or(`name.ilike.%${params.q}%,phone.ilike.%${params.q}%`);

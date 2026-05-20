@@ -1,5 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -10,7 +11,7 @@ import { StatusBadge } from "@/components/admin/StatusBadge";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
 import { formatDateCN } from "@/lib/utils";
-import { MoreHorizontal, Pencil, Trash2, Power, Store } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Power, Store, X, Filter } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
@@ -21,30 +22,41 @@ import { downloadExcel } from "@/lib/excel";
 import { toast } from "sonner";
 
 export function StoresClient({
-  initialRows, initialTotal, initialQ, initialPage, channels, role
+  initialRows, initialTotal, initialQ, initialPage, initialChannelId, channels, role
 }: {
   initialRows: any[];
   initialTotal: number;
   initialQ: string;
   initialPage: number;
+  initialChannelId?: string | null;
   channels: { id: string; name: string }[];
   role: "super_admin" | "admin" | "channel_admin";
 }) {
+  const router = useRouter();
   const [rows, setRows] = useState(initialRows);
   const [total, setTotal] = useState(initialTotal);
   const [q, setQ] = useState(initialQ);
   const [page, setPage] = useState(initialPage);
+  const [channelId, setChannelId] = useState<string | null>(initialChannelId || null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [delTarget, setDelTarget] = useState<any>(null);
   const [, start] = useTransition();
 
-  function reload(nextQ = q, nextPage = page) {
+  const filteredChannel = channelId ? channels.find(c => c.id === channelId) : null;
+
+  function reload(nextQ = q, nextPage = page, nextChannelId = channelId) {
     start(async () => {
-      const { rows: r, total: t } = await listStores({ q: nextQ, page: nextPage, pageSize: 20 });
+      const { rows: r, total: t } = await listStores({ q: nextQ, channel_id: nextChannelId, page: nextPage, pageSize: 20 });
       setRows(r); setTotal(t);
     });
+  }
+
+  function clearChannelFilter() {
+    setChannelId(null); setPage(1);
+    router.replace("/stores");
+    reload(q, 1, null);
   }
 
   function onSearch(v: string) {
@@ -108,6 +120,20 @@ export function StoresClient({
           onExport={onExport}
           placeholder="搜索店铺名称…"
         />
+
+        {filteredChannel && (
+          <div className="-mt-1 mb-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-accent/40 px-3 py-2 text-xs">
+            <Filter className="h-3.5 w-3.5 text-primary" />
+            <span className="text-muted-foreground">已筛选渠道：</span>
+            <Badge variant="default" className="font-medium">{filteredChannel.name}</Badge>
+            <button
+              onClick={clearChannelFilter}
+              className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            >
+              <X className="h-3 w-3" /> 清除筛选
+            </button>
+          </div>
+        )}
 
         {rows.length === 0 ? (
           <EmptyState
@@ -179,7 +205,7 @@ export function StoresClient({
         )}
       </div>
 
-      <Pagination page={page} pageSize={20} total={total} onChange={p => { setPage(p); reload(q, p); }} />
+      <Pagination page={page} pageSize={20} total={total} onChange={p => { setPage(p); reload(q, p, channelId); }} />
 
       <StoreForm
         open={formOpen}

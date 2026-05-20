@@ -3,12 +3,17 @@ import { StoresClient } from "./_components/StoresClient";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { getCurrentSession } from "@/lib/session";
 
-export default async function StoresPage({ searchParams }: { searchParams: { q?: string; page?: string } }) {
+export default async function StoresPage({
+  searchParams
+}: {
+  searchParams: { q?: string; page?: string; channel_id?: string };
+}) {
   const page = Number(searchParams.page || 1);
   const q = searchParams.q || "";
+  const channel_id = searchParams.channel_id || null;
   const session = getCurrentSession();
   const [{ rows, total }, channels] = await Promise.all([
-    listStores({ q, page, pageSize: 20 }),
+    listStores({ q, channel_id, page, pageSize: 20 }),
     listChannelsForSelect()
   ]);
 
@@ -23,6 +28,7 @@ export default async function StoresPage({ searchParams }: { searchParams: { q?:
         initialTotal={total}
         initialQ={q}
         initialPage={page}
+        initialChannelId={channel_id}
         channels={channels}
         role={session?.role || "channel_admin"}
       />

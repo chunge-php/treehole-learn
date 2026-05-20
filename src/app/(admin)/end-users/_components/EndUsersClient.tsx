@@ -1,5 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -9,7 +10,7 @@ import { Pagination } from "@/components/admin/Pagination";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
 import { formatDateCN, formatMoney } from "@/lib/utils";
-import { MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Users, Filter, X } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
@@ -22,29 +23,44 @@ import { toast } from "sonner";
 const GENDER_LABEL: Record<string, string> = { male: "男", female: "女", other: "其他" };
 
 export function EndUsersClient({
-  initialRows, initialTotal, initialQ, initialPage, stores
+  initialRows, initialTotal, initialQ, initialPage, initialChannelId, initialChannelName, initialStoreId, stores
 }: {
   initialRows: any[];
   initialTotal: number;
   initialQ: string;
   initialPage: number;
+  initialChannelId?: string | null;
+  initialChannelName?: string | null;
+  initialStoreId?: string | null;
   stores: { id: string; name: string; channel_id: string; channels?: { name: string } }[];
 }) {
+  const router = useRouter();
   const [rows, setRows] = useState(initialRows);
   const [total, setTotal] = useState(initialTotal);
   const [q, setQ] = useState(initialQ);
   const [page, setPage] = useState(initialPage);
+  const [channelId, setChannelId] = useState<string | null>(initialChannelId || null);
+  const [channelName] = useState<string | null>(initialChannelName || null);
+  const [storeId, setStoreId] = useState<string | null>(initialStoreId || null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [delTarget, setDelTarget] = useState<any>(null);
   const [, start] = useTransition();
 
-  function reload(nextQ = q, nextPage = page) {
+  const filteredStore = storeId ? stores.find(s => s.id === storeId) : null;
+
+  function reload(nextQ = q, nextPage = page, nextChannelId = channelId, nextStoreId = storeId) {
     start(async () => {
-      const { rows: r, total: t } = await listEndUsers({ q: nextQ, page: nextPage, pageSize: 20 });
+      const { rows: r, total: t } = await listEndUsers({ q: nextQ, channel_id: nextChannelId, store_id: nextStoreId, page: nextPage, pageSize: 20 });
       setRows(r); setTotal(t);
     });
+  }
+
+  function clearFilters() {
+    setChannelId(null); setStoreId(null); setPage(1);
+    router.replace("/end-users");
+    reload(q, 1, null, null);
   }
 
   function onSearch(v: string) {
@@ -99,6 +115,21 @@ export function EndUsersClient({
           onExport={onExport}
           placeholder="搜索姓名/电话…"
         />
+
+        {(channelName || filteredStore) && (
+          <div className="-mt-1 mb-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-accent/40 px-3 py-2 text-xs">
+            <Filter className="h-3.5 w-3.5 text-primary" />
+            <span className="text-muted-foreground">已筛选：</span>
+            {channelName && <Badge variant="default" className="font-medium">渠道 · {channelName}</Badge>}
+            {filteredStore && <Badge variant="default" className="font-medium">店铺 · {filteredStore.name}</Badge>}
+            <button
+              onClick={clearFilters}
+              className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            >
+              <X className="h-3 w-3" /> 清除筛选
+            </button>
+          </div>
+        )}
 
         {rows.length === 0 ? (
           <EmptyState
@@ -162,7 +193,7 @@ export function EndUsersClient({
         )}
       </div>
 
-      <Pagination page={page} pageSize={20} total={total} onChange={p => { setPage(p); reload(q, p); }} />
+      <Pagination page={page} pageSize={20} total={total} onChange={p => { setPage(p); reload(q, p, channelId, storeId); }} />
 
       <EndUserForm
         open={formOpen}

@@ -8,9 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { RegionPicker } from "@/components/admin/RegionPicker";
-import { upsertStore, type StoreInput } from "../actions";
+import { upsertStore, checkStoreNameAvailable, type StoreInput } from "../actions";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+type NameCheck = { status: "idle" | "checking" | "available" | "taken"; reason?: string };
 
 export function StoreForm({
   open, onOpenChange, initial, channels, role, onSaved
@@ -40,6 +43,7 @@ export function StoreForm({
     remark: initial?.remark || ""
   });
   const [pending, start] = useTransition();
+  const [nameCheck, setNameCheck] = useState<NameCheck>({ status: "idle" });
 
   useEffect(() => {
     if (!open) return;
@@ -57,12 +61,38 @@ export function StoreForm({
       status: initial?.status || "active",
       remark: initial?.remark || ""
     });
+    setNameCheck({ status: "idle" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial, open]);
 
+  // 实时校验店铺名 + 渠道唯一性 (300ms debounce)
+  useEffect(() => {
+    if (!open) return;
+    const n = (form.name || "").trim();
+    const ch = form.channel_id || null;
+    // 编辑且未变更
+    if (initial && n === (initial.name || "") && ch === (initial.channel_id || null)) {
+      setNameCheck({ status: "idle" });
+      return;
+    }
+    if (!n) { setNameCheck({ status: "idle" }); return; }
+    setNameCheck({ status: "checking" });
+    const t = setTimeout(async () => {
+      try {
+        const r = await checkStoreNameAvailable(n, ch, initial?.id);
+        if (r.ok) setNameCheck({ status: "available" });
+        else setNameCheck({ status: "taken", reason: r.reason });
+      } catch {
+        setNameCheck({ status: "idle" });
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [form.name, form.channel_id, open, initial]);
+
   function submit() {
     if (!form.name.trim()) { toast.error("请填写店铺名称"); return; }
-    // admin 允许不关联渠道; channel_admin 由后端兜底锁定
+    if (nameCheck.status === "checking") { toast.error("名称校验中，请稍候…"); return; }
+    if (nameCheck.status === "taken") { toast.error(nameCheck.reason || "店铺名称冲突"); return; }
     start(async () => {
       try {
         await upsertStore(form);
@@ -76,18 +106,47 @@ export function StoreForm({
   }
 
   const channelLocked = isChannelAdmin || !!initial; // 渠道管理员或编辑时不允许换渠道
+  const showHint = (form.name || "").trim().length > 0 && nameCheck.status !== "idle";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{initial ? "编辑店铺" : "新增店铺"}</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-2 max-h-[60vh] overflow-y-auto">
+        <div className="grid gap-4 py-2 max-h-[65vh] overflow-y-auto pr-1">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>店铺名称 <span className="text-destructive">*</span></Label>
-              <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="例：海淀中关村学习中心" />
+              <div className="relative">
+                <Input
+                  value={form.name}
+                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  placeholder="例：海淀中关村学习中心"
+                  className={cn(
+                    "pr-9",
+                    nameCheck.status === "taken" && "border-destructive focus-visible:ring-destructive",
+                    nameCheck.status === "available" && "border-success focus-visible:ring-success"
+                  )}
+                />
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                  {nameCheck.status === "checking" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                  {nameCheck.status === "available" && <CheckCircle2 className="h-4 w-4 text-success" />}
+                  {nameCheck.status === "taken" && <AlertCircle className="h-4 w-4 text-destructive" />}
+                </div>
+              </div>
+              {showHint && (
+                <p className={cn(
+                  "text-[11px]",
+                  nameCheck.status === "checking" && "text-muted-foreground",
+                  nameCheck.status === "available" && "text-success",
+                  nameCheck.status === "taken" && "text-destructive"
+                )}>
+                  {nameCheck.status === "checking" && "正在检查名称是否可用…"}
+                  {nameCheck.status === "available" && "名称可用"}
+                  {nameCheck.status === "taken" && (nameCheck.reason || "已存在同名店铺")}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>所属渠道 {isChannelAdmin && <span className="text-destructive">*</span>}</Label>
@@ -106,6 +165,11 @@ export function StoreForm({
                   {channels.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {!channelLocked && (
+                <p className="text-[11px] text-muted-foreground">
+                  切换渠道时会重新检查名称
+                </p>
+              )}
             </div>
           </div>
           <div className="space-y-1.5">

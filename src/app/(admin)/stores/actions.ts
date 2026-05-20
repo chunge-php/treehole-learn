@@ -20,6 +20,33 @@ export type StoreInput = {
   remark?: string | null;
 };
 
+/** 实时校验店铺名在指定渠道下是否可用 */
+export async function checkStoreNameAvailable(
+  name: string,
+  channelId: string | null,
+  excludeId?: string
+): Promise<{ ok: boolean; reason?: string }> {
+  const s = requireSession();
+  const n = (name || "").trim();
+  if (!n) return { ok: false, reason: "店铺名称不能为空" };
+  if (n.length < 2) return { ok: false, reason: "至少 2 个字符" };
+
+  // channel_admin 强制使用自己的 channel_id
+  const effChannel = s.role === "channel_admin" ? s.channel_id : channelId;
+
+  const sb = adminSupabase();
+  let qb = sb.from("stores").select("id").eq("name", n);
+  if (effChannel) qb = qb.eq("channel_id", effChannel);
+  else qb = qb.is("channel_id", null);
+  if (excludeId) qb = qb.neq("id", excludeId);
+  const { data } = await qb.limit(1).maybeSingle();
+  if (data) {
+    const ctx = effChannel ? "本渠道下" : "未关联渠道组内";
+    return { ok: false, reason: `${ctx}已存在同名店铺` };
+  }
+  return { ok: true };
+}
+
 export async function listStores(params: { q?: string; status?: string; channel_id?: string | null; page?: number; pageSize?: number }) {
   const s = requireSession();
   const sb = adminSupabase();

@@ -12,6 +12,7 @@ export function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; on
       description="先下载模板，按列名填写后上传。可同时填写「登录账号」与「登录密码」一键创建渠道管理员账号。"
       templateFields={[
         { key: "name", label: "渠道名称", example: "北京启明渠道商" },
+        { key: "level_name", label: "渠道级别", example: "市级" },
         { key: "province", label: "省", example: "北京市" },
         { key: "city", label: "市", example: "北京市" },
         { key: "district", label: "区", example: "海淀区" },

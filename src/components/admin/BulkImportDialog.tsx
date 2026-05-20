@@ -95,7 +95,7 @@ export function BulkImportDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && (
-            <DialogDescription>
+            <DialogDescription className="whitespace-pre-line">
               {description}
               <br />文件在浏览器本地解析，不会被上传到服务器；点击「开始导入」后才会写入数据库。
             </DialogDescription>

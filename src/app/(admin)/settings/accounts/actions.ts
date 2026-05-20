@@ -40,6 +40,24 @@ export async function listAccounts(params: { q?: string; role?: string; status?:
   return { rows, total: count || 0 };
 }
 
+/** 实时校验用户名是否可用 */
+export async function checkAccountUsernameAvailable(
+  username: string,
+  excludeId?: string
+): Promise<{ ok: boolean; reason?: string }> {
+  requireAdmin();
+  const u = (username || "").trim();
+  if (!u) return { ok: false, reason: "用户名不能为空" };
+  if (u.length < 2) return { ok: false, reason: "至少 2 个字符" };
+  if (!/^[a-zA-Z0-9_.-]+$/.test(u)) return { ok: false, reason: "仅支持字母数字与 _ . -" };
+  const sb = adminSupabase();
+  let qb = sb.from("accounts").select("id").eq("username", u).limit(1);
+  if (excludeId) qb = qb.neq("id", excludeId);
+  const { data } = await qb.maybeSingle();
+  if (data) return { ok: false, reason: "用户名已被占用" };
+  return { ok: true };
+}
+
 export async function listChannelsForAccount() {
   requireAdmin();
   const sb = adminSupabase();

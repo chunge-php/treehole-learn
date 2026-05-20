@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
-import Link from "next/link";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,12 +10,13 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { RegionPicker } from "@/components/admin/RegionPicker";
 import { upsertChannel, getChannelAdmins, checkChannelNameAvailable, type ChannelInput } from "../actions";
+import { LinkedAdminsManager } from "./LinkedAdminsManager";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Check, Building2, MapPin, ShieldCheck,
-  CircleCheck, ArrowUpRight, User, CheckCircle2, AlertCircle
+  CircleCheck, CheckCircle2, AlertCircle
 } from "lucide-react";
-import { cn, formatDateCN } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 type FormState = ChannelInput & {
   withAdmin?: boolean;
@@ -193,7 +193,11 @@ export function ChannelForm({
             <BasicFields form={form} setForm={setForm} levels={levels} nameCheck={nameCheck} />
             <RegionFields form={form} setForm={setForm} />
             <StatusField form={form} setForm={setForm} />
-            <LinkedAdminsCard channelId={form.id!} admins={linkedAdmins} onClose={() => onOpenChange(false)} />
+            <LinkedAdminsManager
+              channelId={form.id!}
+              admins={linkedAdmins}
+              onRefresh={() => getChannelAdmins(form.id!).then(setLinkedAdmins).catch(() => {})}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
@@ -547,46 +551,3 @@ function ReviewPanel({ form, levels }: { form: FormState; levels: { id: string; 
   );
 }
 
-function LinkedAdminsCard({ channelId, admins, onClose }: { channelId: string; admins: any[]; onClose: () => void }) {
-  return (
-    <div className="rounded-xl border bg-muted/20 p-4 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium">渠道管理员账号</span>
-          <Badge variant="muted" className="px-1.5 py-0">{admins.length}</Badge>
-        </div>
-        <Link
-          href={`/settings/accounts?channel_id=${channelId}`}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-primary hover:bg-primary/10"
-          onClick={onClose}
-        >
-          管理账号 <ArrowUpRight className="h-3 w-3" />
-        </Link>
-      </div>
-      {admins.length === 0 ? (
-        <div className="text-xs text-muted-foreground py-2">
-          尚未关联任何账号 — 点击右上角「管理账号」前往创建
-        </div>
-      ) : (
-        <div className="space-y-1.5">
-          {admins.map(a => (
-            <div key={a.id} className="flex items-center justify-between rounded-md bg-background px-2.5 py-1.5 text-xs">
-              <div className="flex items-center gap-2">
-                <User className="h-3 w-3 text-muted-foreground" />
-                <span className="font-mono">{a.username}</span>
-                <span className="text-muted-foreground">· {a.display_name}</span>
-                <Badge variant={a.status === "active" ? "success" : "muted"} className="px-1.5 py-0 text-[10px]">
-                  {a.status === "active" ? "正常" : "停用"}
-                </Badge>
-              </div>
-              <span className="text-[10px] text-muted-foreground">
-                上次登录 {formatDateCN(a.last_login_at)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}

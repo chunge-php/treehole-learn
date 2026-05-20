@@ -5,8 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Combobox } from "@/components/ui/combobox";
 import { RegionPicker } from "@/components/admin/RegionPicker";
 import { upsertStore, checkStoreNameAvailable, type StoreInput } from "../actions";
 import { toast } from "sonner";
@@ -150,21 +150,18 @@ export function StoreForm({
             </div>
             <div className="space-y-1.5">
               <Label>所属渠道 {isChannelAdmin && <span className="text-destructive">*</span>}</Label>
-              <Select
-                value={form.channel_id || "__none__"}
-                onValueChange={v => setForm({ ...form, channel_id: v === "__none__" ? null : v })}
+              <Combobox
+                options={[
+                  ...(!isChannelAdmin ? [{ value: "__none__", label: "— 暂不关联渠道" }] : []),
+                  ...channels.map(c => ({ value: c.id, label: c.name }))
+                ]}
+                value={form.channel_id || (isChannelAdmin ? "" : "__none__")}
+                onChange={v => setForm({ ...form, channel_id: (!v || v === "__none__") ? null : v })}
+                placeholder="请选择渠道"
+                searchPlaceholder="搜索渠道名…"
+                emptyText="无匹配渠道"
                 disabled={channelLocked}
-              >
-                <SelectTrigger><SelectValue placeholder="请选择渠道" /></SelectTrigger>
-                <SelectContent>
-                  {!isChannelAdmin && (
-                    <SelectItem value="__none__">
-                      <span className="text-muted-foreground">— 暂不关联渠道</span>
-                    </SelectItem>
-                  )}
-                  {channels.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              />
               {!channelLocked && (
                 <p className="text-[11px] text-muted-foreground">
                   切换渠道时会重新检查名称

@@ -12,7 +12,8 @@ import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
 import Link from "next/link";
 import { formatDateCN, formatMoney } from "@/lib/utils";
-import { MoreHorizontal, Pencil, Trash2, Power, Store, X, Filter, Users, ClipboardList, Smartphone, TrendingUp } from "lucide-react";
+import { Combobox } from "@/components/ui/combobox";
+import { MoreHorizontal, Pencil, Trash2, Power, Store, Users, ClipboardList, Smartphone, TrendingUp } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
@@ -45,7 +46,7 @@ export function StoresClient({
   const [delTarget, setDelTarget] = useState<any>(null);
   const [, start] = useTransition();
 
-  const filteredChannel = channelId ? channels.find(c => c.id === channelId) : null;
+  const isChannelAdmin = role === "channel_admin";
 
   function reload(nextQ = q, nextPage = page, nextChannelId = channelId) {
     start(async () => {
@@ -54,11 +55,16 @@ export function StoresClient({
     });
   }
 
-  function clearChannelFilter() {
-    setChannelId(null); setPage(1);
-    router.replace("/stores");
-    reload(q, 1, null);
+  function onChannelChange(v: string | null) {
+    setChannelId(v); setPage(1);
+    const sp = new URLSearchParams();
+    if (v) sp.set("channel_id", v);
+    if (q) sp.set("q", q);
+    router.replace(`/stores${sp.toString() ? "?" + sp.toString() : ""}`);
+    reload(q, 1, v);
   }
+
+  const channelOptions = channels.map(c => ({ value: c.id, label: c.name }));
 
   function onSearch(v: string) {
     setQ(v); setPage(1);
@@ -123,21 +129,21 @@ export function StoresClient({
           onImport={() => setImportOpen(true)}
           onExport={onExport}
           placeholder="搜索店铺名称…"
+          rightExtra={
+            !isChannelAdmin && (
+              <Combobox
+                options={channelOptions}
+                value={channelId}
+                onChange={onChannelChange}
+                placeholder="全部渠道"
+                searchPlaceholder="搜索渠道名…"
+                emptyText="无匹配渠道"
+                triggerClassName="h-9 w-48"
+                clearable
+              />
+            )
+          }
         />
-
-        {filteredChannel && (
-          <div className="-mt-1 mb-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-accent/40 px-3 py-2 text-xs">
-            <Filter className="h-3.5 w-3.5 text-primary" />
-            <span className="text-muted-foreground">已筛选渠道：</span>
-            <Badge variant="default" className="font-medium">{filteredChannel.name}</Badge>
-            <button
-              onClick={clearChannelFilter}
-              className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            >
-              <X className="h-3 w-3" /> 清除筛选
-            </button>
-          </div>
-        )}
 
         {rows.length === 0 ? (
           <EmptyState

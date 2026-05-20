@@ -112,7 +112,8 @@ export function EndUsersClient({
       所属渠道: r.channels?.name || "",
       登录账号: r.login_username || "",
       关联手机号: r.phone || "",
-      创建时间: formatDateCN(r.created_at)
+      注册时间: formatDateCN(r.created_at),
+      最近登录: r.last_login_at ? formatDateCN(r.last_login_at) : "从未登录"
     }));
     downloadExcel(data, `普通用户导出_${new Date().getTime()}.xlsx`);
     toast.success("已导出当前页数据");
@@ -195,7 +196,8 @@ export function EndUsersClient({
                 <TableHead>渠道</TableHead>
                 <TableHead>登录账号</TableHead>
                 <TableHead>手机号</TableHead>
-                <TableHead>创建时间</TableHead>
+                <TableHead>注册时间</TableHead>
+                <TableHead>最近登录</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
@@ -221,6 +223,9 @@ export function EndUsersClient({
                     {r.phone || <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDateCN(r.created_at)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {r.last_login_at ? formatDateCN(r.last_login_at) : <span className="opacity-60">从未登录</span>}
+                  </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

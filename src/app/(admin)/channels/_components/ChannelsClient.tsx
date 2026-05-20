@@ -59,15 +59,14 @@ export function ChannelsClient({
 
   function onExport() {
     const data = rows.map(r => ({
-      渠道编号: r.id,
       渠道名称: r.name,
+      编号: r.seq_no ?? "",
       级别: r.channel_levels?.name || "",
-      省: r.province || "",
-      市: r.city || "",
-      区: r.district || "",
-      地址: r.address || "",
+      归属地区: [r.province, r.city, r.district].filter(Boolean).join(" · "),
       联系人: r.contact_name || "",
       联系电话: r.contact_phone || "",
+      店铺数: r._store_count ?? 0,
+      用户数: r._user_count ?? 0,
       状态: r.status === "active" ? "正常" : "停用",
       创建时间: formatDateCN(r.created_at)
     }));

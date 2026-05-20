@@ -214,15 +214,15 @@ export function AssessmentForm({
                     key={q}
                     type="button"
                     onClick={() => {
-                      const wasNonSpeech = form.qtype !== "语音题";
                       const isSpeech = q === "语音题";
                       setForm({
                         ...form,
                         qtype: q,
-                        options: isSpeech ? [] : (form.options?.length ? form.options : [{ label: "", value: "A" }, { label: "", value: "B" }])
+                        // 语音题: 清空选项与答案
+                        options: isSpeech ? [] : (form.options?.length ? form.options : [{ label: "", value: "A" }, { label: "", value: "B" }]),
+                        answer: isSpeech ? "" : form.answer
                       });
                       if (q === "判断题") applyTrueFalse();
-                      void wasNonSpeech; void isSpeech;
                     }}
                     className={cn(
                       "rounded-lg border px-3 py-2 text-xs text-center transition-colors",
@@ -249,6 +249,13 @@ export function AssessmentForm({
             />
             <p className="text-[11px] text-muted-foreground">支持图片/视频, 多选; 单文件 ≤ 50MB</p>
           </div>
+
+          {/* 语音题占位提示 */}
+          {form.qtype === "语音题" && (
+            <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+              语音题: 学员通过录音作答, 无需配置选项与答案。题目文件可上传引导音/示范音。
+            </div>
+          )}
 
           {/* 题目内容 (选项) - 仅非语音题 */}
           {form.qtype !== "语音题" && (

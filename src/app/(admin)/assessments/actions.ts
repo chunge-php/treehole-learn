@@ -131,6 +131,21 @@ export async function deleteAssessment(id: string) {
   return { ok: true };
 }
 
+/** 清空所有测评题 (需要二次确认, 通常用于导错数据后重置) */
+export async function clearAllAssessments(confirmText: string) {
+  requireAdmin();
+  if (confirmText !== "确认清空") {
+    throw new Error("请输入'确认清空'以执行");
+  }
+  const sb = adminSupabase();
+  const { count: before } = await sb.from("assessments").select("id", { count: "exact", head: true });
+  // neq 假条件绕过 Supabase 默认 WHERE 必填限制
+  const { error } = await sb.from("assessments").delete().neq("id", "__never__");
+  if (error) throw new Error(error.message);
+  revalidatePath("/assessments");
+  return { ok: true, removed: before || 0 };
+}
+
 export async function toggleAssessmentStatus(id: string, status: "active" | "disabled") {
   requireAdmin();
   const sb = adminSupabase();

@@ -10,11 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { RegionPicker } from "@/components/admin/RegionPicker";
-import { upsertChannel, getChannelAdmins, type ChannelInput } from "../actions";
+import { upsertChannel, getChannelAdmins, checkChannelNameAvailable, type ChannelInput } from "../actions";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Check, Building2, MapPin, ShieldCheck,
-  CircleCheck, ArrowUpRight, User
+  CircleCheck, ArrowUpRight, User, CheckCircle2, AlertCircle
 } from "lucide-react";
 import { cn, formatDateCN } from "@/lib/utils";
 
@@ -51,6 +51,7 @@ const STEPS = [
 ] as const;
 
 type StepKey = typeof STEPS[number]["key"];
+type NameCheck = { status: "idle" | "checking" | "available" | "taken"; reason?: string };
 
 export function ChannelForm({
   open, onOpenChange, initial, levels, onSaved
@@ -66,8 +67,29 @@ export function ChannelForm({
   const [showPwd, setShowPwd] = useState(false);
   const [pending, start] = useTransition();
   const [linkedAdmins, setLinkedAdmins] = useState<any[]>([]);
+  const [nameCheck, setNameCheck] = useState<NameCheck>({ status: "idle" });
 
   const isEdit = !!form.id;
+
+  // 名称实时去重检查 (300ms debounce)
+  useEffect(() => {
+    if (!open) return;
+    const n = (form.name || "").trim();
+    // 编辑模式下名称未变更 → 不需要检查
+    if (isEdit && n === (initial?.name || "")) { setNameCheck({ status: "idle" }); return; }
+    if (!n) { setNameCheck({ status: "idle" }); return; }
+    setNameCheck({ status: "checking" });
+    const t = setTimeout(async () => {
+      try {
+        const r = await checkChannelNameAvailable(n, form.id);
+        if (r.ok) setNameCheck({ status: "available" });
+        else setNameCheck({ status: "taken", reason: r.reason });
+      } catch {
+        setNameCheck({ status: "idle" });
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [form.name, open, isEdit, initial?.name, form.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -100,6 +122,8 @@ export function ChannelForm({
   function validateStep(s: StepKey): string | null {
     if (s === "basic") {
       if (!form.name.trim()) return "请填写渠道名称";
+      if (nameCheck.status === "taken") return nameCheck.reason || "渠道名称已存在";
+      if (nameCheck.status === "checking") return "名称校验中，请稍候…";
     }
     if (s === "admin" && !isEdit && form.withAdmin) {
       if (!form.admin_username?.trim()) return "请填写管理员账号";
@@ -166,7 +190,7 @@ export function ChannelForm({
             <DialogTitle>编辑渠道商</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2 max-h-[70vh] overflow-y-auto pr-1">
-            <BasicFields form={form} setForm={setForm} levels={levels} />
+            <BasicFields form={form} setForm={setForm} levels={levels} nameCheck={nameCheck} />
             <RegionFields form={form} setForm={setForm} />
             <StatusField form={form} setForm={setForm} />
             <LinkedAdminsCard channelId={form.id!} admins={linkedAdmins} onClose={() => onOpenChange(false)} />
@@ -201,7 +225,7 @@ export function ChannelForm({
         }} />
 
         <div className="min-h-[280px] py-3 max-h-[60vh] overflow-y-auto pr-1">
-          {step === "basic" && <BasicFields form={form} setForm={setForm} levels={levels} />}
+          {step === "basic" && <BasicFields form={form} setForm={setForm} levels={levels} nameCheck={nameCheck} />}
           {step === "region" && <RegionFields form={form} setForm={setForm} />}
           {step === "admin" && (
             <AdminFields
@@ -296,18 +320,44 @@ function Stepper({
 // =============================================================
 // 步骤字段组件
 // =============================================================
-function BasicFields({ form, setForm, levels }: any) {
+function BasicFields({ form, setForm, levels, nameCheck }: any) {
+  const cs: NameCheck = nameCheck || { status: "idle" };
+  const showHint = (form.name || "").trim().length > 0 && cs.status !== "idle";
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>渠道名称 <span className="text-destructive">*</span></Label>
-          <Input
-            value={form.name}
-            onChange={e => setForm({ ...form, name: e.target.value })}
-            placeholder="例：北京启明渠道商"
-            autoFocus
-          />
+          <div className="relative">
+            <Input
+              value={form.name}
+              onChange={e => setForm({ ...form, name: e.target.value })}
+              placeholder="例：北京启明渠道商"
+              autoFocus
+              className={cn(
+                "pr-9",
+                cs.status === "taken" && "border-destructive focus-visible:ring-destructive",
+                cs.status === "available" && "border-success focus-visible:ring-success"
+              )}
+            />
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+              {cs.status === "checking" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              {cs.status === "available" && <CheckCircle2 className="h-4 w-4 text-success" />}
+              {cs.status === "taken" && <AlertCircle className="h-4 w-4 text-destructive" />}
+            </div>
+          </div>
+          {showHint && (
+            <p className={cn(
+              "text-[11px] flex items-center gap-1",
+              cs.status === "checking" && "text-muted-foreground",
+              cs.status === "available" && "text-success",
+              cs.status === "taken" && "text-destructive"
+            )}>
+              {cs.status === "checking" && "正在检查名称是否可用…"}
+              {cs.status === "available" && "名称可用"}
+              {cs.status === "taken" && (cs.reason || "已存在同名渠道")}
+            </p>
+          )}
         </div>
         <div className="space-y-1.5">
           <Label>渠道级别</Label>

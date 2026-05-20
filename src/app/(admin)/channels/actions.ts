@@ -25,6 +25,20 @@ export type ChannelInput = {
   } | null;
 };
 
+/** 实时校验渠道名是否可用 */
+export async function checkChannelNameAvailable(name: string, excludeId?: string): Promise<{ ok: boolean; reason?: string }> {
+  requireAdmin();
+  const n = (name || "").trim();
+  if (!n) return { ok: false, reason: "渠道名称不能为空" };
+  if (n.length < 2) return { ok: false, reason: "至少 2 个字符" };
+  const sb = adminSupabase();
+  let qb = sb.from("channels").select("id").eq("name", n).limit(1);
+  if (excludeId) qb = qb.neq("id", excludeId);
+  const { data } = await qb.maybeSingle();
+  if (data) return { ok: false, reason: "已存在同名渠道" };
+  return { ok: true };
+}
+
 export async function listChannels(params: { q?: string; status?: string; page?: number; pageSize?: number }) {
   requireAdmin();
   const sb = adminSupabase();

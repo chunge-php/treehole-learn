@@ -202,6 +202,11 @@ export async function bulkImportChannels(rows: Record<string, any>[]) {
   const usernameSet = new Set((existingAccs || []).map((a: any) => a.username));
   const usernameSeenInBatch = new Set<string>();
 
+  // 渠道级别 name → id 映射
+  const { data: levels = [] } = await sb.from("channel_levels").select("id, name");
+  const levelMap = new Map<string, string>();
+  (levels || []).forEach((l: any) => levelMap.set(String(l.name).trim(), l.id));
+
   let success = 0;
   const errors: { row: number; message: string }[] = [];
   for (let i = 0; i < rows.length; i++) {
@@ -249,11 +254,23 @@ export async function bulkImportChannels(rows: Record<string, any>[]) {
       }
     }
 
+    // 解析渠道级别
+    const levelName = String(r["渠道级别"] || r["level_name"] || "").trim();
+    let level_id: string | null = null;
+    if (levelName) {
+      level_id = levelMap.get(levelName) || null;
+      if (!level_id) {
+        errors.push({ row: i + 2, message: `渠道级别「${levelName}」不存在 (可在「设置 → 渠道级别」中先创建)` });
+        continue;
+      }
+    }
+
     // 创建渠道
     const channelId = shortId("ch");
     const { error: chErr } = await sb.from("channels").insert({
       id: channelId,
       name,
+      level_id,
       province: r["省"] || r["province"] || null,
       city: r["市"] || r["city"] || null,
       district: r["区"] || r["district"] || null,

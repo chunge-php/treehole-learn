@@ -7,8 +7,9 @@ insert into channel_levels (id, name, rank) values
   ('lv_dist', '区级', 3)
 on conflict (id) do nothing;
 
+-- 超级管理员: admin / admin123  (bcryptjs 10 轮加盐)
 insert into accounts (id, username, password_hash, display_name, role, status) values
-  ('acc_root00000', 'admin', '$2a$10$DGZkP8d7C0nA3T6yqxJ4cuU.zZpW9oFR9D7y6nL.iN4Yjz3wO0u02', '超级管理员', 'super_admin', 'active')
+  ('acc_root00000', 'admin', '$2a$10$7CM1XSq50iIXqChW6chn8uFIq9aBi8ESPmi1gquazXOp9.6zIgYH.', '超级管理员', 'super_admin', 'active')
 on conflict (id) do nothing;
 
 -- 演示渠道

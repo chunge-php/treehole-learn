@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/admin/EmptyState";
 import { formatDateCN } from "@/lib/utils";
 import { MoreHorizontal, Pencil, Trash2, ShieldCheck } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
 import { Form } from "./Form";
 import { deleteChannelLevel, listChannelLevels } from "../actions";
@@ -90,6 +90,8 @@ export function Client({ initialRows }: { initialRows: any[] }) {
                         <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuLabel className="truncate max-w-[12rem]">「{r.name}」</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => onEdit(r)}>
                           <Pencil className="h-3.5 w-3.5" /> 编辑
                         </DropdownMenuItem>

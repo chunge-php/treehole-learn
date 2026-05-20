@@ -15,7 +15,7 @@ import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
 import { MoreHorizontal, Pencil, Trash2, Power, ClipboardList, Image as ImageIcon, Video as VideoIcon, AlertTriangle, Loader2 } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
 import { AssessmentForm } from "./AssessmentForm";
 import { ImportDialog } from "./ImportDialog";
@@ -243,6 +243,8 @@ export function AssessmentsClient({
                         <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuLabel className="truncate max-w-[16rem]">「{(r.title || "").slice(0, 20)}{(r.title || "").length > 20 ? "…" : ""}」</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => onEdit(r)}>
                           <Pencil className="h-3.5 w-3.5" /> 编辑
                         </DropdownMenuItem>

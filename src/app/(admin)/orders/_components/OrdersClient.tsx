@@ -1,5 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -9,7 +10,7 @@ import { DataToolbar } from "@/components/admin/DataToolbar";
 import { Pagination } from "@/components/admin/Pagination";
 import { EmptyState } from "@/components/admin/EmptyState";
 import { formatDateCN, formatMoney } from "@/lib/utils";
-import { ReceiptText, Eye } from "lucide-react";
+import { ReceiptText, Eye, Filter, X } from "lucide-react";
 import { OrderDetailDialog } from "./OrderDetailDialog";
 import { listOrders } from "../actions";
 import { downloadExcel } from "@/lib/excel";
@@ -23,43 +24,58 @@ const PAY_STATUS_OPTIONS: Record<string, { label: string; variant: any }> = {
 };
 
 export function OrdersClient({
-  initialRows, initialTotal, initialQ, initialPage, initialPayStatus
+  initialRows, initialTotal, initialQ, initialPage, initialPayStatus, initialChannelId, initialChannelName
 }: {
   initialRows: any[];
   initialTotal: number;
   initialQ: string;
   initialPage: number;
   initialPayStatus: string;
+  initialChannelId?: string | null;
+  initialChannelName?: string | null;
 }) {
+  const router = useRouter();
   const [rows, setRows] = useState(initialRows);
   const [total, setTotal] = useState(initialTotal);
   const [q, setQ] = useState(initialQ);
   const [page, setPage] = useState(initialPage);
   const [payStatus, setPayStatus] = useState(initialPayStatus);
+  const [channelId, setChannelId] = useState<string | null>(initialChannelId || null);
+  const [channelName] = useState<string | null>(initialChannelName || null);
   const [viewing, setViewing] = useState<any>(null);
   const [, start] = useTransition();
 
-  function reload(nextQ = q, nextPage = page, nextStatus = payStatus) {
+  function reload(nextQ = q, nextPage = page, nextStatus = payStatus, nextChannel = channelId) {
     start(async () => {
       const { rows: r, total: t } = await listOrders({
         q: nextQ,
         page: nextPage,
         pay_status: nextStatus || undefined,
+        channel_id: nextChannel,
         pageSize: 20
       });
       setRows(r); setTotal(t);
     });
   }
 
+  function clearChannelFilter() {
+    setChannelId(null); setPage(1);
+    const sp = new URLSearchParams();
+    if (payStatus) sp.set("pay_status", payStatus);
+    if (q) sp.set("q", q);
+    router.replace(`/orders${sp.toString() ? "?" + sp.toString() : ""}`);
+    reload(q, 1, payStatus, null);
+  }
+
   function onSearch(v: string) {
     setQ(v); setPage(1);
-    reload(v, 1, payStatus);
+    reload(v, 1, payStatus, channelId);
   }
 
   function onStatusChange(v: string) {
     const next = v === "__all__" ? "" : v;
     setPayStatus(next); setPage(1);
-    reload(q, 1, next);
+    reload(q, 1, next, channelId);
   }
 
   function onExport() {
@@ -100,6 +116,20 @@ export function OrdersClient({
             </Select>
           }
         />
+
+        {channelName && (
+          <div className="-mt-1 mb-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-accent/40 px-3 py-2 text-xs">
+            <Filter className="h-3.5 w-3.5 text-primary" />
+            <span className="text-muted-foreground">已筛选渠道：</span>
+            <Badge variant="default" className="font-medium">{channelName}</Badge>
+            <button
+              onClick={clearChannelFilter}
+              className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            >
+              <X className="h-3 w-3" /> 清除筛选
+            </button>
+          </div>
+        )}
 
         {rows.length === 0 ? (
           <EmptyState
@@ -156,7 +186,7 @@ export function OrdersClient({
         )}
       </div>
 
-      <Pagination page={page} pageSize={20} total={total} onChange={p => { setPage(p); reload(q, p, payStatus); }} />
+      <Pagination page={page} pageSize={20} total={total} onChange={p => { setPage(p); reload(q, p, payStatus, channelId); }} />
 
       <OrderDetailDialog
         open={!!viewing}

@@ -78,6 +78,19 @@ export async function upsertStore(input: StoreInput) {
     throw new Error("无法识别您的渠道归属");
   }
 
+  // 唯一性预检: 同一渠道下店铺名不能重复 (null 渠道也算同一组)
+  if (input.name?.trim()) {
+    let dupQ = sb.from("stores").select("id").eq("name", input.name.trim());
+    if (channel_id) dupQ = dupQ.eq("channel_id", channel_id);
+    else dupQ = dupQ.is("channel_id", null);
+    if (input.id) dupQ = dupQ.neq("id", input.id);
+    const { data: dup } = await dupQ.limit(1).maybeSingle();
+    if (dup) {
+      const ctx = channel_id ? "本渠道下" : "未关联渠道";
+      throw new Error(`${ctx}已存在同名店铺「${input.name.trim()}」`);
+    }
+  }
+
   const payload = {
     channel_id,
     name: input.name,
@@ -139,6 +152,12 @@ export async function bulkImportStores(rows: Record<string, any>[]) {
   const channelMap = new Map<string, string>();
   (chs || []).forEach((c: any) => channelMap.set(String(c.name).trim(), c.id));
 
+  // 现有 (name + channel_id) 集合预检 (channel_id 为 null 时统一用"__none__")
+  const { data: existingStores = [] } = await sb.from("stores").select("name, channel_id");
+  const dupKey = (n: string, c: string | null) => `${n}::${c || "__none__"}`;
+  const existsSet = new Set((existingStores || []).map((st: any) => dupKey(String(st.name).trim(), st.channel_id)));
+  const seenInBatch = new Set<string>();
+
   let success = 0;
   const errors: { row: number; message: string }[] = [];
 
@@ -163,6 +182,17 @@ export async function bulkImportStores(rows: Record<string, any>[]) {
       }
     }
 
+    const k = dupKey(name, channel_id);
+    if (existsSet.has(k)) {
+      const ctx = channel_id ? "该渠道下" : "未关联渠道";
+      errors.push({ row: i + 2, message: `${ctx}已存在同名店铺「${name}」` });
+      continue;
+    }
+    if (seenInBatch.has(k)) {
+      errors.push({ row: i + 2, message: `本次导入中重复出现店铺「${name}」` });
+      continue;
+    }
+
     const { error } = await sb.from("stores").insert({
       id: shortId("st"),
       channel_id,
@@ -177,7 +207,7 @@ export async function bulkImportStores(rows: Record<string, any>[]) {
       remark: r["备注"] || r["remark"] || null
     });
     if (error) errors.push({ row: i + 2, message: error.message });
-    else success++;
+    else { success++; seenInBatch.add(k); }
   }
   revalidatePath("/stores");
   return { total: rows.length, success, failed: rows.length - success, errors };

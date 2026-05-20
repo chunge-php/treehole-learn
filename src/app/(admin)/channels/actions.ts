@@ -60,6 +60,15 @@ export async function listChannels(params: { q?: string; status?: string; page?:
 export async function upsertChannel(input: ChannelInput) {
   requireAdmin();
   const sb = adminSupabase();
+
+  // 名称唯一性预检 (排除自己)
+  if (input.name?.trim()) {
+    let dupQ = sb.from("channels").select("id").eq("name", input.name.trim()).limit(1);
+    if (input.id) dupQ = dupQ.neq("id", input.id);
+    const { data: dup } = await dupQ.maybeSingle();
+    if (dup) throw new Error(`渠道名称「${input.name.trim()}」已存在`);
+  }
+
   if (input.id) {
     const { error } = await sb.from("channels").update({
       name: input.name,
@@ -163,6 +172,11 @@ export async function toggleChannelStatus(id: string, status: "active" | "disabl
 export async function bulkImportChannels(rows: Record<string, any>[]) {
   requireAdmin();
   const sb = adminSupabase();
+  // 拉一份现有渠道名集合做预检
+  const { data: existing = [] } = await sb.from("channels").select("name");
+  const existsSet = new Set((existing || []).map((c: any) => c.name));
+  const seenInBatch = new Set<string>();
+
   let success = 0;
   const errors: { row: number; message: string }[] = [];
   for (let i = 0; i < rows.length; i++) {
@@ -170,6 +184,14 @@ export async function bulkImportChannels(rows: Record<string, any>[]) {
     const name = String(r["渠道名称"] || r["name"] || "").trim();
     if (!name) {
       errors.push({ row: i + 2, message: "渠道名称为空" });
+      continue;
+    }
+    if (existsSet.has(name)) {
+      errors.push({ row: i + 2, message: `渠道名称「${name}」已存在` });
+      continue;
+    }
+    if (seenInBatch.has(name)) {
+      errors.push({ row: i + 2, message: `本次导入中重复出现「${name}」` });
       continue;
     }
     const { error } = await sb.from("channels").insert({
@@ -184,7 +206,7 @@ export async function bulkImportChannels(rows: Record<string, any>[]) {
       remark: r["备注"] || r["remark"] || null
     });
     if (error) errors.push({ row: i + 2, message: error.message });
-    else success++;
+    else { success++; seenInBatch.add(name); }
   }
   revalidatePath("/channels");
   return { total: rows.length, success, failed: rows.length - success, errors };

@@ -80,7 +80,7 @@ export function AssessmentsClient({
       题目文件: (Array.isArray(r.media_urls) ? r.media_urls : [])
         .map((m: any) => m.url)
         .filter(Boolean)
-        .join("\n"),
+        .join(","),
       所属项目: r.project_name || "",
       状态: r.status === "active" ? "正常" : "停用"
     }));

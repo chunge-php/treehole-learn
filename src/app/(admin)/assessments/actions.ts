@@ -5,6 +5,30 @@ import { requireAdmin } from "@/lib/auth";
 import { shortId } from "@/lib/utils";
 import { DIMENSIONS, QTYPES, type AssessmentDimension, type AssessmentQType } from "./_components/constants";
 
+/** 按扩展名推断 MIME 类型 (用于导入 media_urls 字符串) */
+function guessMime(url: string): string {
+  const ext = (url.split(".").pop() || "").toLowerCase().split(/[?#]/)[0];
+  const imageMap: Record<string, string> = {
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif",
+    webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml"
+  };
+  const videoMap: Record<string, string> = {
+    mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime",
+    avi: "video/x-msvideo", mkv: "video/x-matroska"
+  };
+  return imageMap[ext] || videoMap[ext] || "application/octet-stream";
+}
+
+function parseMediaUrlsCell(cell: any): { url: string; type: string; name?: string }[] {
+  const raw = String(cell || "").trim();
+  if (!raw) return [];
+  return raw
+    .split(/[,，\n]/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(url => ({ url, type: guessMime(url), name: url.split("/").pop() || undefined }));
+}
+
 export type AssessmentOption = {
   label: string;
   value: string;
@@ -216,13 +240,14 @@ export async function bulkImportAssessments(rows: Record<string, any>[]) {
     nextSort = Math.max(nextSort, sortOrder + 1);
 
     const answer = qtype === "语音题" ? null : (String(r["答案"] || r["answer"] || "").trim() || null);
+    const media_urls = parseMediaUrlsCell(r["题目文件"] ?? r["media_urls"]);
 
     const { error } = await sb.from("assessments").insert({
       id: shortId("as"),
       title,
       description: r["描述"] || r["description"] || null,
       cover_url: r["封面"] || r["cover_url"] || null,
-      media_urls: [],
+      media_urls,
       project_name: r["所属项目"] || r["project_name"] || null,
       dimension,
       qtype,

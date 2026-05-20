@@ -76,15 +76,19 @@ export function LinkedAdminsManager({
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-primary" />
           <span className="text-sm font-medium">渠道管理员账号</span>
-          <Badge variant="muted" className="px-1.5 py-0">{admins.length}</Badge>
+          <Badge variant="muted" className="px-1.5 py-0">{admins.length} / 1</Badge>
         </div>
-        <Button
-          variant={creating ? "ghost" : "soft"}
-          size="sm"
-          onClick={() => { setCreating(v => !v); setOpenId(null); setMode(null); }}
-        >
-          {creating ? <><X className="h-3.5 w-3.5" /> 收起</> : <><Plus className="h-3.5 w-3.5" /> 新增账号</>}
-        </Button>
+        {admins.length >= 1 ? (
+          <span className="text-[11px] text-muted-foreground">每个渠道仅允许 1 个登录账号</span>
+        ) : (
+          <Button
+            variant={creating ? "ghost" : "soft"}
+            size="sm"
+            onClick={() => { setCreating(v => !v); setOpenId(null); setMode(null); }}
+          >
+            {creating ? <><X className="h-3.5 w-3.5" /> 收起</> : <><Plus className="h-3.5 w-3.5" /> 新增账号</>}
+          </Button>
+        )}
       </div>
 
       {creating && (

@@ -40,7 +40,7 @@ export async function listAccounts(params: { q?: string; role?: string; status?:
   return { rows, total: count || 0 };
 }
 
-/** 实时校验用户名是否可用 */
+/** 实时校验用户名是否可用 (支持中文 + 字母数字 + _ . -) */
 export async function checkAccountUsernameAvailable(
   username: string,
   excludeId?: string
@@ -49,13 +49,26 @@ export async function checkAccountUsernameAvailable(
   const u = (username || "").trim();
   if (!u) return { ok: false, reason: "用户名不能为空" };
   if (u.length < 2) return { ok: false, reason: "至少 2 个字符" };
-  if (!/^[a-zA-Z0-9_.-]+$/.test(u)) return { ok: false, reason: "仅支持字母数字与 _ . -" };
+  // 允许: 中文 / 英文字母 / 数字 / _ . -
+  if (!/^[一-龥a-zA-Z0-9_.-]+$/.test(u)) {
+    return { ok: false, reason: "仅支持中文、字母、数字与 _ . -" };
+  }
   const sb = adminSupabase();
   let qb = sb.from("accounts").select("id").eq("username", u).limit(1);
   if (excludeId) qb = qb.neq("id", excludeId);
   const { data } = await qb.maybeSingle();
   if (data) return { ok: false, reason: "用户名已被占用" };
   return { ok: true };
+}
+
+/** 检查某渠道是否已有渠道管理员账号 */
+export async function checkChannelHasAdmin(channel_id: string, excludeAccountId?: string): Promise<boolean> {
+  requireAdmin();
+  const sb = adminSupabase();
+  let qb = sb.from("accounts").select("id").eq("channel_id", channel_id).eq("role", "channel_admin").limit(1);
+  if (excludeAccountId) qb = qb.neq("id", excludeAccountId);
+  const { data } = await qb.maybeSingle();
+  return !!data;
 }
 
 export async function listChannelsForAccount() {
@@ -81,6 +94,17 @@ export async function createAccount(input: AccountInput) {
   const sb = adminSupabase();
   const { data: existed } = await sb.from("accounts").select("id").eq("username", input.username).maybeSingle();
   if (existed) throw new Error("用户名已存在");
+
+  // 一个渠道仅允许 1 个 channel_admin
+  if (input.role === "channel_admin" && input.channel_id) {
+    const { data: dup } = await sb
+      .from("accounts")
+      .select("id, username")
+      .eq("channel_id", input.channel_id)
+      .eq("role", "channel_admin")
+      .maybeSingle();
+    if (dup) throw new Error(`该渠道已存在管理员账号「${dup.username}」, 一个渠道仅允许 1 个`);
+  }
 
   const id = shortId("acc");
   const password_hash = await bcrypt.hash(input.password, 10);
@@ -109,6 +133,18 @@ export async function updateAccount(input: AccountInput) {
     throw new Error("渠道管理员必须选择归属渠道");
   }
   const sb = adminSupabase();
+
+  // 一个渠道仅允许 1 个 channel_admin (排除自己)
+  if (input.role === "channel_admin" && input.channel_id) {
+    const { data: dup } = await sb
+      .from("accounts")
+      .select("id, username")
+      .eq("channel_id", input.channel_id)
+      .eq("role", "channel_admin")
+      .neq("id", input.id)
+      .maybeSingle();
+    if (dup) throw new Error(`该渠道已存在管理员账号「${dup.username}」, 一个渠道仅允许 1 个`);
+  }
   const payload: any = {
     display_name: input.display_name.trim(),
     phone: input.phone,

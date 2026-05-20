@@ -110,6 +110,9 @@ export async function upsertChannel(input: ChannelInput) {
     if (!a.username.trim()) throw new Error("请填写管理员账号");
     if (!a.password || a.password.length < 6) throw new Error("管理员密码至少 6 位");
     if (!a.display_name.trim()) throw new Error("请填写管理员显示名");
+    if (!/^[一-龥a-zA-Z0-9_.-]+$/.test(a.username.trim())) {
+      throw new Error("管理员账号仅支持中文、字母、数字与 _ . -");
+    }
     const { data: existed } = await sb.from("accounts").select("id").eq("username", a.username.trim()).maybeSingle();
     if (existed) throw new Error("管理员账号已存在");
   }

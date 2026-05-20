@@ -14,9 +14,12 @@ import { cn } from "@/lib/utils";
  * - 上传按钮: 选择本地文件上传到 Supabase Storage
  * - 素材库按钮: 浏览已上传过的素材并复用
  */
+export type UploadedInfo = { url: string; name: string; size: number; type: string; ext: string };
+
 export function UploadField({
   value,
   onChange,
+  onUploaded,
   accept = "image/*",
   prefix = "img",
   placeholder = "粘贴 URL / 上传 / 从素材库选择",
@@ -27,6 +30,7 @@ export function UploadField({
 }: {
   value?: string | null;
   onChange: (v: string | null) => void;
+  onUploaded?: (info: UploadedInfo) => void;
   accept?: string;
   prefix?: string;
   placeholder?: string;
@@ -49,6 +53,10 @@ export function UploadField({
         const r = await uploadFile(fd);
         if (!r.ok) throw new Error(r.error || "上传失败");
         onChange(r.url || null);
+        if (onUploaded && r.url) {
+          const ext = (file.name.split(".").pop() || "").toLowerCase();
+          onUploaded({ url: r.url, name: file.name, size: file.size, type: file.type, ext });
+        }
         toast.success("已上传");
       } catch (e: any) {
         toast.error(e?.message || "上传失败");

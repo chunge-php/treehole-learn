@@ -8,8 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Combobox } from "@/components/ui/combobox";
+import { UploadField } from "@/components/admin/UploadField";
 import { upsertResource, type ResourceInput } from "../actions";
-import { TYPE_LABEL, type ResourceType } from "./constants";
+import { TYPE_LABEL, type ResourceType, formatFileSize } from "./constants";
 import { toast } from "sonner";
 import { Loader2, FileText, Video, File as FileIcon, FolderTree, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
@@ -62,13 +63,22 @@ export function ResourceForm({
     });
   }, [initial, open, defaultType]);
 
+  const isFile = form.type === "file";
+
   function submit() {
-    if (!form.title.trim()) { toast.error("请填写标题"); return; }
+    // 文件类型: 标题可空, 后端会用 name 兜底; 其他类型必填
+    if (!isFile && !form.title.trim()) { toast.error("请填写标题"); return; }
     if (form.type === "text" && !(form.body || "").trim()) { toast.error("请填写正文内容"); return; }
-    if (form.type !== "text" && !(form.media_url || "").trim()) { toast.error("请填写媒体地址"); return; }
+    if (form.type !== "text" && !(form.media_url || "").trim()) { toast.error("请上传或填写文件地址"); return; }
     start(async () => {
       try {
-        await upsertResource(form);
+        // 文件类型: 标题为空时用文件名兜底 (file_ext 也兜底)
+        const payload = { ...form };
+        if (isFile && !payload.title.trim()) {
+          const fname = (form.media_url || "").split("/").pop() || "未命名文件";
+          payload.title = fname.replace(/\.[^.]+$/, "");
+        }
+        await upsertResource(payload);
         toast.success(initial ? "已更新" : "已创建");
         onOpenChange(false);
         onSaved?.();
@@ -102,160 +112,186 @@ export function ResourceForm({
             )}
           </div>
 
-          <div className="space-y-1.5">
-            <Label>标题 <span className="text-destructive">*</span></Label>
-            <Input
-              value={form.title}
-              onChange={e => setForm({ ...form, title: e.target.value })}
-              placeholder="资源标题"
-            />
-          </div>
-
-          {/* 文本/视频才显示分类 (顶级类型仅服务这两类资源) */}
-          {(form.type === "text" || form.type === "video") && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="flex items-center gap-1.5">
-                  <FolderTree className="h-3.5 w-3.5 text-muted-foreground" /> 所属分类
-                </Label>
-                <Link
-                  href="/settings/top-types"
-                  target="_blank"
-                  className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
-                >
-                  管理顶级类型 <ArrowUpRight className="h-3 w-3" />
-                </Link>
-              </div>
-              <Combobox
-                options={categories.map(c => ({
-                  value: c.id,
-                  label: c.name,
-                  hint: c.parent_name || undefined
-                }))}
-                value={form.category_id || null}
-                onChange={v => setForm({ ...form, category_id: v })}
-                placeholder="未分类"
-                searchPlaceholder="搜索分类名…"
-                emptyText={categories.length === 0 ? "请先在「顶级类型」中创建二级分类" : "无匹配"}
-                clearable
-              />
-              {categories.length === 0 && (
-                <p className="text-[11px] text-warning">
-                  尚未配置任何二级分类, 请先到「设置 → 顶级类型」中创建
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label>封面图 URL</Label>
-            <Input
-              value={form.cover_url || ""}
-              onChange={e => setForm({ ...form, cover_url: e.target.value })}
-              placeholder="https://… 资源封面图地址"
-            />
-            {form.cover_url ? (
-              <img src={form.cover_url} alt="" className="mt-1 h-20 w-32 rounded border object-cover" />
-            ) : null}
-          </div>
-
-          {form.type === "text" && (
-            <div className="space-y-1.5">
-              <Label>正文内容 <span className="text-destructive">*</span></Label>
-              <Textarea
-                value={form.body || ""}
-                onChange={e => setForm({ ...form, body: e.target.value })}
-                rows={8}
-                placeholder="支持纯文本/Markdown。学生端将按段落渲染"
-                className="font-mono text-sm"
-              />
-            </div>
-          )}
-
-          {form.type === "video" && (
+          {/* 文件类型: 先上传, 再(可选)填标题 */}
+          {isFile && (
             <>
               <div className="space-y-1.5">
-                <Label>视频地址 <span className="text-destructive">*</span></Label>
+                <Label>上传文件 <span className="text-destructive">*</span></Label>
+                <UploadField
+                  value={form.media_url}
+                  onChange={v => setForm({ ...form, media_url: v })}
+                  onUploaded={info => {
+                    setForm(f => ({
+                      ...f,
+                      media_url: info.url,
+                      file_size: info.size,
+                      file_ext: info.ext,
+                      // 标题留空时自动填充 (用户没手动填过)
+                      title: f.title.trim() ? f.title : info.name.replace(/\.[^.]+$/, "")
+                    }));
+                  }}
+                  accept="*"
+                  prefix="resource-file"
+                  placeholder="粘贴 URL / 上传文件 / 从素材库选择"
+                  preview={false}
+                  pickerKinds={["file", "image", "video", "audio"]}
+                />
+                {form.media_url && form.file_size != null && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {form.file_ext ? <code className="font-mono mr-1.5">.{form.file_ext}</code> : null}
+                    {formatFileSize(form.file_size)}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>标题 <span className="text-[11px] text-muted-foreground">（选填，留空时自动用文件名）</span></Label>
                 <Input
-                  value={form.media_url || ""}
-                  onChange={e => setForm({ ...form, media_url: e.target.value })}
-                  placeholder="https://… mp4/m3u8 视频地址"
+                  value={form.title}
+                  onChange={e => setForm({ ...form, title: e.target.value })}
+                  placeholder="自动从文件名填充"
                 />
               </div>
+
               <div className="space-y-1.5">
-                <Label>时长（秒）</Label>
+                <Label>备注</Label>
                 <Input
-                  type="number"
-                  value={form.duration_sec ?? ""}
-                  onChange={e => setForm({ ...form, duration_sec: e.target.value === "" ? null : Number(e.target.value) })}
-                  placeholder="例：180 表示 3 分钟"
+                  value={form.remark || ""}
+                  onChange={e => setForm({ ...form, remark: e.target.value })}
+                  placeholder="内部备注（学生不可见）"
                 />
               </div>
             </>
           )}
 
-          {form.type === "file" && (
+          {/* 文本 / 视频: 完整字段 */}
+          {!isFile && (
             <>
               <div className="space-y-1.5">
-                <Label>文件下载地址 <span className="text-destructive">*</span></Label>
+                <Label>标题 <span className="text-destructive">*</span></Label>
                 <Input
-                  value={form.media_url || ""}
-                  onChange={e => setForm({ ...form, media_url: e.target.value })}
-                  placeholder="https://… 文件下载链接"
+                  value={form.title}
+                  onChange={e => setForm({ ...form, title: e.target.value })}
+                  placeholder="资源标题"
                 />
               </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-1.5">
+                    <FolderTree className="h-3.5 w-3.5 text-muted-foreground" /> 所属分类
+                  </Label>
+                  <Link
+                    href="/settings/top-types"
+                    target="_blank"
+                    className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                  >
+                    管理顶级类型 <ArrowUpRight className="h-3 w-3" />
+                  </Link>
+                </div>
+                <Combobox
+                  options={categories.map(c => ({
+                    value: c.id,
+                    label: c.name,
+                    hint: c.parent_name || undefined
+                  }))}
+                  value={form.category_id || null}
+                  onChange={v => setForm({ ...form, category_id: v })}
+                  placeholder="未分类"
+                  searchPlaceholder="搜索分类名…"
+                  emptyText={categories.length === 0 ? "请先在「顶级类型」中创建二级分类" : "无匹配"}
+                  clearable
+                />
+                {categories.length === 0 && (
+                  <p className="text-[11px] text-warning">
+                    尚未配置任何二级分类, 请先到「设置 → 顶级类型」中创建
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>封面图</Label>
+                <UploadField
+                  value={form.cover_url}
+                  onChange={v => setForm({ ...form, cover_url: v })}
+                  accept="image/*"
+                  prefix="cover"
+                  placeholder="URL / 上传 / 素材库"
+                />
+              </div>
+
+              {form.type === "text" && (
+                <div className="space-y-1.5">
+                  <Label>正文内容 <span className="text-destructive">*</span></Label>
+                  <Textarea
+                    value={form.body || ""}
+                    onChange={e => setForm({ ...form, body: e.target.value })}
+                    rows={8}
+                    placeholder="支持纯文本/Markdown。学生端将按段落渲染"
+                    className="font-mono text-sm"
+                  />
+                </div>
+              )}
+
+              {form.type === "video" && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>视频地址 <span className="text-destructive">*</span></Label>
+                    <UploadField
+                      value={form.media_url}
+                      onChange={v => setForm({ ...form, media_url: v })}
+                      onUploaded={info => setForm(f => ({ ...f, media_url: info.url }))}
+                      accept="video/*"
+                      prefix="resource-video"
+                      placeholder="URL / 上传视频 / 素材库"
+                      preview={false}
+                      pickerKinds={["video"]}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>时长（秒）</Label>
+                    <Input
+                      type="number"
+                      value={form.duration_sec ?? ""}
+                      onChange={e => setForm({ ...form, duration_sec: e.target.value === "" ? null : Number(e.target.value) })}
+                      placeholder="例：180 表示 3 分钟"
+                    />
+                  </div>
+                </>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>文件大小（字节）</Label>
+                  <Label>排序</Label>
                   <Input
                     type="number"
-                    value={form.file_size ?? ""}
-                    onChange={e => setForm({ ...form, file_size: e.target.value === "" ? null : Number(e.target.value) })}
-                    placeholder="例：1048576"
+                    value={form.sort_order ?? 0}
+                    onChange={e => setForm({ ...form, sort_order: Number(e.target.value) || 0 })}
+                    placeholder="数值越小越靠前"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>扩展名</Label>
+                  <Label>备注</Label>
                   <Input
-                    value={form.file_ext || ""}
-                    onChange={e => setForm({ ...form, file_ext: e.target.value })}
-                    placeholder="pdf / docx / zip"
+                    value={form.remark || ""}
+                    onChange={e => setForm({ ...form, remark: e.target.value })}
+                    placeholder="内部备注（学生不可见）"
                   />
                 </div>
               </div>
+
+              <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+                <div>
+                  <div className="text-sm font-medium">上架状态</div>
+                  <div className="text-xs text-muted-foreground">下架后学生端将不可见</div>
+                </div>
+                <Switch
+                  checked={form.status === "online"}
+                  onCheckedChange={c => setForm({ ...form, status: c ? "online" : "offline" })}
+                />
+              </div>
             </>
           )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>排序</Label>
-              <Input
-                type="number"
-                value={form.sort_order ?? 0}
-                onChange={e => setForm({ ...form, sort_order: Number(e.target.value) || 0 })}
-                placeholder="数值越小越靠前"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>备注</Label>
-              <Input
-                value={form.remark || ""}
-                onChange={e => setForm({ ...form, remark: e.target.value })}
-                placeholder="内部备注（学生不可见）"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
-            <div>
-              <div className="text-sm font-medium">上架状态</div>
-              <div className="text-xs text-muted-foreground">下架后学生端将不可见</div>
-            </div>
-            <Switch
-              checked={form.status === "online"}
-              onCheckedChange={c => setForm({ ...form, status: c ? "online" : "offline" })}
-            />
-          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>

@@ -197,6 +197,11 @@ export async function bulkImportChannels(rows: Record<string, any>[]) {
   const existsSet = new Set((existing || []).map((c: any) => c.name));
   const seenInBatch = new Set<string>();
 
+  // 现有 + 本次批次的账号名集合, 防重复
+  const { data: existingAccs = [] } = await sb.from("accounts").select("username");
+  const usernameSet = new Set((existingAccs || []).map((a: any) => a.username));
+  const usernameSeenInBatch = new Set<string>();
+
   let success = 0;
   const errors: { row: number; message: string }[] = [];
   for (let i = 0; i < rows.length; i++) {
@@ -214,8 +219,40 @@ export async function bulkImportChannels(rows: Record<string, any>[]) {
       errors.push({ row: i + 2, message: `本次导入中重复出现「${name}」` });
       continue;
     }
-    const { error } = await sb.from("channels").insert({
-      id: shortId("ch"),
+
+    // 解析账号信息
+    const adminUsername = String(r["登录账号"] || r["admin_username"] || "").trim();
+    const adminPassword = String(r["登录密码"] || r["admin_password"] || "").trim();
+    const hasUsername = adminUsername.length > 0;
+    const hasPassword = adminPassword.length > 0;
+
+    if (hasUsername !== hasPassword) {
+      errors.push({ row: i + 2, message: "登录账号与登录密码必须同时填写或同时留空" });
+      continue;
+    }
+    if (hasUsername) {
+      if (!/^[一-龥a-zA-Z0-9_.-]+$/.test(adminUsername)) {
+        errors.push({ row: i + 2, message: "登录账号仅支持中文、字母、数字与 _ . -" });
+        continue;
+      }
+      if (adminUsername.length < 2) {
+        errors.push({ row: i + 2, message: "登录账号至少 2 个字符" });
+        continue;
+      }
+      if (adminPassword.length < 6) {
+        errors.push({ row: i + 2, message: "登录密码至少 6 位" });
+        continue;
+      }
+      if (usernameSet.has(adminUsername) || usernameSeenInBatch.has(adminUsername)) {
+        errors.push({ row: i + 2, message: `登录账号「${adminUsername}」已被占用` });
+        continue;
+      }
+    }
+
+    // 创建渠道
+    const channelId = shortId("ch");
+    const { error: chErr } = await sb.from("channels").insert({
+      id: channelId,
       name,
       province: r["省"] || r["province"] || null,
       city: r["市"] || r["city"] || null,
@@ -225,8 +262,34 @@ export async function bulkImportChannels(rows: Record<string, any>[]) {
       contact_phone: r["联系电话"] || r["contact_phone"] || null,
       remark: r["备注"] || r["remark"] || null
     });
-    if (error) errors.push({ row: i + 2, message: error.message });
-    else { success++; seenInBatch.add(name); }
+    if (chErr) {
+      errors.push({ row: i + 2, message: chErr.message });
+      continue;
+    }
+
+    // 同步创建账号 (如果有)
+    if (hasUsername) {
+      const password_hash = await bcrypt.hash(adminPassword, 10);
+      const { error: accErr } = await sb.from("accounts").insert({
+        id: shortId("acc"),
+        username: adminUsername,
+        password_hash,
+        display_name: adminUsername, // 默认显示名 = 账号; 用户后续可改
+        role: "channel_admin",
+        channel_id: channelId,
+        status: "active"
+      });
+      if (accErr) {
+        // 回滚渠道
+        await sb.from("channels").delete().eq("id", channelId);
+        errors.push({ row: i + 2, message: `创建账号失败: ${accErr.message}` });
+        continue;
+      }
+      usernameSeenInBatch.add(adminUsername);
+    }
+
+    success++;
+    seenInBatch.add(name);
   }
   revalidatePath("/channels");
   return { total: rows.length, success, failed: rows.length - success, errors };

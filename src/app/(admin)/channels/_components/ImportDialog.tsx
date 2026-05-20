@@ -22,6 +22,8 @@ export function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; on
         { key: "address", label: "地址", example: "中关村大街1号" },
         { key: "contact_name", label: "联系人", example: "李明" },
         { key: "contact_phone", label: "联系电话", example: "13800138000" },
+        { key: "admin_username", label: "登录账号", example: "qiming001" },
+        { key: "admin_password", label: "登录密码", example: "abc123" },
         { key: "remark", label: "备注", example: "" }
       ],
       "渠道商导入模板.xlsx"

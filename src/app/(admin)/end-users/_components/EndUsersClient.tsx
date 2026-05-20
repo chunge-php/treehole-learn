@@ -141,7 +141,7 @@ export function EndUsersClient({
           createLabel="新增用户"
           onImport={() => setImportOpen(true)}
           onExport={onExport}
-          placeholder="搜索姓名/电话/登录账号…"
+          placeholder="搜索姓名 / 手机号 / 登录账号…"
           rightExtra={
             <div className="flex items-center gap-2">
               {!isChannelAdmin && (
@@ -195,7 +195,7 @@ export function EndUsersClient({
                 <TableHead>所属店铺</TableHead>
                 <TableHead>渠道</TableHead>
                 <TableHead>登录账号</TableHead>
-                <TableHead>手机号</TableHead>
+                <TableHead>关联手机号</TableHead>
                 <TableHead>注册时间</TableHead>
                 <TableHead>最近登录</TableHead>
                 <TableHead className="text-right">操作</TableHead>

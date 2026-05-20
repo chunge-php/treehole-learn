@@ -142,45 +142,43 @@ export function EndUsersClient({
           onExport={onExport}
           placeholder="搜索姓名/电话/登录账号…"
           rightExtra={
-            !isChannelAdmin && (
+            <div className="flex items-center gap-2">
+              {!isChannelAdmin && (
+                <Combobox
+                  options={channels.map(c => ({ value: c.id, label: c.name }))}
+                  value={channelId}
+                  onChange={onChannelChange}
+                  placeholder="全部渠道"
+                  searchPlaceholder="搜索渠道…"
+                  emptyText="无匹配渠道"
+                  triggerClassName="h-9 w-40"
+                  clearable
+                />
+              )}
               <Combobox
-                options={channels.map(c => ({ value: c.id, label: c.name }))}
-                value={channelId}
-                onChange={onChannelChange}
-                placeholder="全部渠道"
-                searchPlaceholder="搜索渠道…"
-                emptyText="无匹配渠道"
-                triggerClassName="h-9 w-40"
+                key={`store-filter-${channelId || "all"}`}
+                options={storesInChannel.map(s => ({
+                  value: s.id,
+                  label: s.name,
+                  hint: !channelId ? s.channels?.name : undefined
+                }))}
+                value={storeId}
+                onChange={onStoreChange}
+                placeholder={channelId ? `「${channels.find(c => c.id === channelId)?.name}」下的店铺` : "全部店铺"}
+                searchPlaceholder="搜索店铺名…"
+                emptyText={channelId ? "该渠道下暂无店铺" : "暂无店铺"}
+                triggerClassName="h-9 w-48"
                 clearable
               />
-            )
+            </div>
           }
         />
 
-        {/* 店铺筛选 (与渠道联动) */}
-        <div className="-mt-1 mb-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">店铺筛选</span>
-          <Combobox
-            key={`store-filter-${channelId || "all"}`}
-            options={storesInChannel.map(s => ({
-              value: s.id,
-              label: s.name,
-              hint: !channelId ? s.channels?.name : undefined
-            }))}
-            value={storeId}
-            onChange={onStoreChange}
-            placeholder={channelId ? `「${channels.find(c => c.id === channelId)?.name}」下的全部店铺` : "全部店铺"}
-            searchPlaceholder="搜索店铺名…"
-            emptyText={channelId ? "该渠道下暂无店铺" : "暂无店铺"}
-            triggerClassName="h-9 w-64"
-            clearable
-          />
-          {channelId && (
-            <span className="text-[11px] text-primary">
-              · 已联动: 仅显示该渠道下 {storesInChannel.length} 家店铺
-            </span>
-          )}
-        </div>
+        {channelId && (
+          <div className="-mt-1 mb-3 text-[11px] text-primary">
+            已联动: 仅显示「{channels.find(c => c.id === channelId)?.name}」下的 {storesInChannel.length} 家店铺
+          </div>
+        )}
 
         {rows.length === 0 ? (
           <EmptyState

@@ -36,7 +36,7 @@ export function ResourcesClient({
   initialQ: string;
   initialPage: number;
   initialType: string;
-  categories: { id: string; name: string }[];
+  categories: { id: string; name: string; parent_id?: string | null; parent_name?: string | null }[];
 }) {
   const [rows, setRows] = useState(initialRows);
   const [total, setTotal] = useState(initialTotal);

@@ -5,13 +5,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Combobox } from "@/components/ui/combobox";
 import { upsertResource, type ResourceInput } from "../actions";
 import { TYPE_LABEL, type ResourceType } from "./constants";
 import { toast } from "sonner";
-import { Loader2, FileText, Video, File as FileIcon } from "lucide-react";
+import { Loader2, FileText, Video, File as FileIcon, FolderTree, ArrowUpRight } from "lucide-react";
+import Link from "next/link";
+
+type CategoryOpt = { id: string; name: string; parent_id?: string | null; parent_name?: string | null };
 
 export function ResourceForm({
   open, onOpenChange, initial, defaultType, categories, onSaved
@@ -20,7 +23,7 @@ export function ResourceForm({
   onOpenChange: (v: boolean) => void;
   initial?: any;
   defaultType?: ResourceType;
-  categories: { id: string; name: string }[];
+  categories: CategoryOpt[];
   onSaved?: () => void;
 }) {
   const [form, setForm] = useState<ResourceInput>({
@@ -99,26 +102,50 @@ export function ResourceForm({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>标题 <span className="text-destructive">*</span></Label>
-              <Input
-                value={form.title}
-                onChange={e => setForm({ ...form, title: e.target.value })}
-                placeholder="资源标题"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>所属分类</Label>
-              <Select value={form.category_id || "__none"} onValueChange={v => setForm({ ...form, category_id: v === "__none" ? null : v })}>
-                <SelectTrigger><SelectValue placeholder="未分类" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none">未分类</SelectItem>
-                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-1.5">
+            <Label>标题 <span className="text-destructive">*</span></Label>
+            <Input
+              value={form.title}
+              onChange={e => setForm({ ...form, title: e.target.value })}
+              placeholder="资源标题"
+            />
           </div>
+
+          {/* 文本/视频才显示分类 (顶级类型仅服务这两类资源) */}
+          {(form.type === "text" || form.type === "video") && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-1.5">
+                  <FolderTree className="h-3.5 w-3.5 text-muted-foreground" /> 所属分类
+                </Label>
+                <Link
+                  href="/settings/top-types"
+                  target="_blank"
+                  className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                >
+                  管理顶级类型 <ArrowUpRight className="h-3 w-3" />
+                </Link>
+              </div>
+              <Combobox
+                options={categories.map(c => ({
+                  value: c.id,
+                  label: c.name,
+                  hint: c.parent_name || undefined
+                }))}
+                value={form.category_id || null}
+                onChange={v => setForm({ ...form, category_id: v })}
+                placeholder="未分类"
+                searchPlaceholder="搜索分类名…"
+                emptyText={categories.length === 0 ? "请先在「顶级类型」中创建二级分类" : "无匹配"}
+                clearable
+              />
+              {categories.length === 0 && (
+                <p className="text-[11px] text-warning">
+                  尚未配置任何二级分类, 请先到「设置 → 顶级类型」中创建
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>封面图 URL</Label>

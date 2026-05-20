@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 160 20% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 160 20% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 20% 12%;
+
+    /* 树洞绿 #1E9B6B */
+    --primary: 158 68% 36%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 160 14% 96%;
+    --secondary-foreground: 160 20% 16%;
+
+    --muted: 160 14% 96%;
+    --muted-foreground: 160 10% 44%;
+
+    --accent: 158 60% 94%;
+    --accent-foreground: 158 68% 22%;
+
+    --destructive: 0 76% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 158 68% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 35 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 210 92% 50%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 160 12% 90%;
+    --input: 160 12% 90%;
+    --ring: 158 68% 36%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 160 22% 8%;
+    --foreground: 160 14% 96%;
+    --card: 160 22% 10%;
+    --card-foreground: 160 14% 96%;
+    --popover: 160 22% 10%;
+    --popover-foreground: 160 14% 96%;
+    --primary: 158 64% 50%;
+    --primary-foreground: 160 22% 8%;
+    --secondary: 160 18% 16%;
+    --secondary-foreground: 160 14% 96%;
+    --muted: 160 18% 16%;
+    --muted-foreground: 160 10% 64%;
+    --accent: 158 30% 22%;
+    --accent-foreground: 158 64% 70%;
+    --destructive: 0 64% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 160 18% 18%;
+    --input: 160 18% 18%;
+    --ring: 158 64% 50%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+  }
+  html { scroll-behavior: smooth; }
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/70 backdrop-blur-xl border border-white/40 shadow-[0_8px_30px_rgb(0,0,0,0.04)];
+  }
+  .ring-soft {
+    box-shadow: 0 0 0 1px hsl(var(--border)), 0 1px 2px rgb(0 0 0 / 0.04);
+  }
+  .text-gradient-leaf {
+    background: linear-gradient(135deg, hsl(158 68% 36%), hsl(180 60% 42%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.4); background-clip: content-box; border: 2px solid transparent; }

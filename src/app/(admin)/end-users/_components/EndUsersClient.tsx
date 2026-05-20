@@ -1,0 +1,190 @@
+"use client";
+import { useState, useTransition } from "react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { DataToolbar } from "@/components/admin/DataToolbar";
+import { Pagination } from "@/components/admin/Pagination";
+import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
+import { EmptyState } from "@/components/admin/EmptyState";
+import { formatDateCN, formatMoney } from "@/lib/utils";
+import { MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
+} from "@/components/ui/dropdown-menu";
+import { EndUserForm } from "./EndUserForm";
+import { ImportDialog } from "./ImportDialog";
+import { deleteEndUser, listEndUsers } from "../actions";
+import { downloadExcel } from "@/lib/excel";
+import { toast } from "sonner";
+
+const GENDER_LABEL: Record<string, string> = { male: "男", female: "女", other: "其他" };
+
+export function EndUsersClient({
+  initialRows, initialTotal, initialQ, initialPage, stores
+}: {
+  initialRows: any[];
+  initialTotal: number;
+  initialQ: string;
+  initialPage: number;
+  stores: { id: string; name: string; channel_id: string; channels?: { name: string } }[];
+}) {
+  const [rows, setRows] = useState(initialRows);
+  const [total, setTotal] = useState(initialTotal);
+  const [q, setQ] = useState(initialQ);
+  const [page, setPage] = useState(initialPage);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<any>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [delTarget, setDelTarget] = useState<any>(null);
+  const [, start] = useTransition();
+
+  function reload(nextQ = q, nextPage = page) {
+    start(async () => {
+      const { rows: r, total: t } = await listEndUsers({ q: nextQ, page: nextPage, pageSize: 20 });
+      setRows(r); setTotal(t);
+    });
+  }
+
+  function onSearch(v: string) {
+    setQ(v); setPage(1);
+    reload(v, 1);
+  }
+
+  function onCreate() { setEditing(null); setFormOpen(true); }
+  function onEdit(r: any) { setEditing(r); setFormOpen(true); }
+
+  function onExport() {
+    const data = rows.map(r => ({
+      用户编号: r.id,
+      姓名: r.name,
+      所属店铺: r.stores?.name || "",
+      所属渠道: r.channels?.name || "",
+      联系电话: r.phone || "",
+      性别: GENDER_LABEL[r.gender] || "",
+      年龄: r.age ?? "",
+      年级: r.grade || "",
+      学校: r.school || "",
+      家长姓名: r.parent_name || "",
+      家长电话: r.parent_phone || "",
+      付费金额: Number(r.paid_amount || 0),
+      创建时间: formatDateCN(r.created_at)
+    }));
+    downloadExcel(data, `普通用户导出_${new Date().getTime()}.xlsx`);
+    toast.success("已导出当前页数据");
+  }
+
+  async function onDelete() {
+    if (!delTarget) return;
+    try {
+      await deleteEndUser(delTarget.id);
+      toast.success("已删除");
+      setDelTarget(null);
+      reload();
+    } catch (e: any) {
+      toast.error(e?.message || "删除失败");
+    }
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="p-4">
+        <DataToolbar
+          q={q}
+          onSearch={onSearch}
+          onCreate={onCreate}
+          createLabel="新增用户"
+          onImport={() => setImportOpen(true)}
+          onExport={onExport}
+          placeholder="搜索姓名/电话…"
+        />
+
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="还没有普通用户"
+            description="点击右上角「新增用户」或批量导入开始"
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>姓名</TableHead>
+                <TableHead>所属店铺</TableHead>
+                <TableHead>渠道</TableHead>
+                <TableHead>联系电话</TableHead>
+                <TableHead>性别 / 年龄</TableHead>
+                <TableHead>年级</TableHead>
+                <TableHead>付费金额</TableHead>
+                <TableHead>创建时间</TableHead>
+                <TableHead className="text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map(r => (
+                <TableRow key={r.id}>
+                  <TableCell>
+                    <div className="font-medium">{r.name}</div>
+                    <div className="text-[11px] text-muted-foreground font-mono">#{r.seq_no}</div>
+                  </TableCell>
+                  <TableCell>
+                    {r.stores?.name ? <Badge variant="outline">{r.stores.name}</Badge> : <span className="text-muted-foreground text-xs">—</span>}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{r.channels?.name || "—"}</TableCell>
+                  <TableCell className="text-sm">{r.phone || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {[GENDER_LABEL[r.gender], r.age ? `${r.age}岁` : null].filter(Boolean).join(" · ") || "—"}
+                  </TableCell>
+                  <TableCell className="text-sm">{r.grade || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                  <TableCell className="text-sm tabular-nums">{formatMoney(r.paid_amount)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{formatDateCN(r.created_at)}</TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => onEdit(r)}>
+                          <Pencil className="h-3.5 w-3.5" /> 编辑
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => setDelTarget(r)} className="text-destructive focus:text-destructive">
+                          <Trash2 className="h-3.5 w-3.5" /> 删除
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+
+      <Pagination page={page} pageSize={20} total={total} onChange={p => { setPage(p); reload(q, p); }} />
+
+      <EndUserForm
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        initial={editing}
+        stores={stores}
+        onSaved={() => reload()}
+      />
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onDone={() => reload()}
+      />
+      <ConfirmDialog
+        open={!!delTarget}
+        onOpenChange={v => !v && setDelTarget(null)}
+        title="删除普通用户"
+        description={`确定要删除「${delTarget?.name}」吗？该用户的所有测评记录、订单也将一并删除。`}
+        confirmText="确认删除"
+        destructive
+        onConfirm={onDelete}
+      />
+    </Card>
+  );
+}

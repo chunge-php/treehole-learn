@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { UploadField } from "@/components/admin/UploadField";
 import { upsertTopType, type TopTypeInput, type TopTypeNode } from "../actions";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -100,50 +101,38 @@ export function Form({
 
           {!isChild && (
             <div className="space-y-1.5">
-              <Label>封面图 URL</Label>
-              <Input
-                value={form.cover_url || ""}
-                onChange={e => setForm({ ...form, cover_url: e.target.value })}
-                placeholder="https://…/cover.png"
+              <Label>封面图</Label>
+              <UploadField
+                value={form.cover_url}
+                onChange={v => setForm({ ...form, cover_url: v })}
+                accept="image/*"
+                prefix="cover"
+                placeholder="URL / 上传 / 素材库"
               />
-              {form.cover_url && (
-                <div className="mt-1.5 flex h-20 w-32 items-center justify-center overflow-hidden rounded-lg border bg-muted/40">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={form.cover_url} alt="封面" className="h-full w-full object-cover" />
-                </div>
-              )}
             </div>
           )}
 
           {isChild && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label>未选中图标 URL</Label>
-                <Input
-                  value={form.unselected_icon_url || ""}
-                  onChange={e => setForm({ ...form, unselected_icon_url: e.target.value })}
-                  placeholder="https://…/icon-off.png"
+                <Label>未选中图标</Label>
+                <UploadField
+                  value={form.unselected_icon_url}
+                  onChange={v => setForm({ ...form, unselected_icon_url: v })}
+                  accept="image/*"
+                  prefix="icon-off"
+                  placeholder="URL / 上传 / 素材库"
                 />
-                {form.unselected_icon_url && (
-                  <div className="mt-1.5 flex h-12 w-12 items-center justify-center overflow-hidden rounded-md border bg-card">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={form.unselected_icon_url} alt="未选中" className="h-full w-full object-contain" />
-                  </div>
-                )}
               </div>
               <div className="space-y-1.5">
-                <Label>选中图标 URL</Label>
-                <Input
-                  value={form.selected_icon_url || ""}
-                  onChange={e => setForm({ ...form, selected_icon_url: e.target.value })}
-                  placeholder="https://…/icon-on.png"
+                <Label>选中图标</Label>
+                <UploadField
+                  value={form.selected_icon_url}
+                  onChange={v => setForm({ ...form, selected_icon_url: v })}
+                  accept="image/*"
+                  prefix="icon-on"
+                  placeholder="URL / 上传 / 素材库"
                 />
-                {form.selected_icon_url && (
-                  <div className="mt-1.5 flex h-12 w-12 items-center justify-center overflow-hidden rounded-md border bg-card ring-2 ring-primary/40">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={form.selected_icon_url} alt="选中" className="h-full w-full object-contain" />
-                  </div>
-                )}
               </div>
             </div>
           )}

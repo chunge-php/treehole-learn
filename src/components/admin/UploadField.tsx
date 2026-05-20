@@ -3,23 +3,26 @@ import { useRef, useState, useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { uploadFile } from "@/lib/upload";
+import { AssetPickerDialog } from "./AssetPickerDialog";
 import { toast } from "sonner";
-import { Image as ImageIcon, Upload, Loader2, X } from "lucide-react";
+import { Upload, Loader2, X, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * 单文件上传 + URL 输入复合控件
+ * 单文件上传 + URL 输入 + 素材库选择 复合控件
  * - 文本框: 手动粘贴 URL
- * - 按钮: 选择本地文件上传到 Supabase Storage, 成功后填回文本框
- * - 已有值时显示预览缩略 (图片)
+ * - 上传按钮: 选择本地文件上传到 Supabase Storage
+ * - 素材库按钮: 浏览已上传过的素材并复用
  */
 export function UploadField({
   value,
   onChange,
   accept = "image/*",
   prefix = "img",
-  placeholder = "粘贴 URL 或点击上传",
+  placeholder = "粘贴 URL / 上传 / 从素材库选择",
   preview = true,
+  enablePicker = true,
+  pickerKinds,
   className
 }: {
   value?: string | null;
@@ -28,15 +31,16 @@ export function UploadField({
   prefix?: string;
   placeholder?: string;
   preview?: boolean;
+  enablePicker?: boolean;
+  pickerKinds?: Array<"image" | "video" | "audio" | "file">;
   className?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
-  const [_progress, setProgress] = useState(0);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   function onPick(file: File | null) {
     if (!file) return;
-    setProgress(0);
     start(async () => {
       try {
         const fd = new FormData();
@@ -55,6 +59,11 @@ export function UploadField({
   }
 
   const isImage = accept.includes("image");
+  const inferredKinds: Array<"image" | "video" | "audio" | "file"> = pickerKinds || (
+    isImage ? ["image"] :
+    accept.includes("video") ? ["video"] :
+    ["image", "video", "audio", "file"]
+  );
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -65,6 +74,19 @@ export function UploadField({
           placeholder={placeholder}
           className="flex-1"
         />
+        {enablePicker && (
+          <Button
+            type="button"
+            variant="outline"
+            size="default"
+            onClick={() => setPickerOpen(true)}
+            disabled={pending}
+            className="shrink-0"
+            title="从素材库选择"
+          >
+            <FolderOpen className="h-4 w-4" /> 素材库
+          </Button>
+        )}
         <Button
           type="button"
           variant="outline"
@@ -100,6 +122,15 @@ export function UploadField({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={value} alt="" className="max-h-32 max-w-xs rounded object-contain" onError={(e: any) => { e.target.style.display = "none"; }} />
         </div>
+      )}
+
+      {enablePicker && (
+        <AssetPickerDialog
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          onSelect={a => onChange(a.url)}
+          acceptKinds={inferredKinds}
+        />
       )}
     </div>
   );

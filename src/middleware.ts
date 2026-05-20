@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { verifySession, SESSION_COOKIE } from "@/lib/session";
+import { verifySessionEdge, SESSION_COOKIE } from "@/lib/session-edge";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/public", "/_next", "/favicon"];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   if (PUBLIC_PATHS.some(p => path.startsWith(p))) return NextResponse.next();
   if (path === "/") {
@@ -13,7 +13,7 @@ export function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  const session = verifySession(token);
+  const session = await verifySessionEdge(token);
   if (!session) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

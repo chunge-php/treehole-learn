@@ -105,7 +105,7 @@ export function StoreForm({
     });
   }
 
-  const channelLocked = isChannelAdmin || !!initial; // 渠道管理员或编辑时不允许换渠道
+  const channelLocked = isChannelAdmin; // 仅渠道管理员锁定; admin 编辑时也可换渠道(用于重新关联孤儿数据)
   const showHint = (form.name || "").trim().length > 0 && nameCheck.status !== "idle";
 
   return (

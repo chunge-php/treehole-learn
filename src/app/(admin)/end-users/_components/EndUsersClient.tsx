@@ -1,16 +1,17 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Combobox } from "@/components/ui/combobox";
 import { DataToolbar } from "@/components/admin/DataToolbar";
 import { Pagination } from "@/components/admin/Pagination";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
-import { formatDateCN, formatMoney } from "@/lib/utils";
-import { MoreHorizontal, Pencil, Trash2, Users, Filter, X } from "lucide-react";
+import { formatDateCN } from "@/lib/utils";
+import { MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
@@ -20,27 +21,29 @@ import { deleteEndUser, listEndUsers } from "../actions";
 import { downloadExcel } from "@/lib/excel";
 import { toast } from "sonner";
 
-const GENDER_LABEL: Record<string, string> = { male: "男", female: "女", other: "其他" };
+type StoreOpt = { id: string; name: string; channel_id: string; channels?: { name: string } };
+type ChannelOpt = { id: string; name: string };
 
 export function EndUsersClient({
-  initialRows, initialTotal, initialQ, initialPage, initialChannelId, initialChannelName, initialStoreId, stores
+  initialRows, initialTotal, initialQ, initialPage, initialChannelId, initialStoreId, stores, channels, role
 }: {
   initialRows: any[];
   initialTotal: number;
   initialQ: string;
   initialPage: number;
   initialChannelId?: string | null;
-  initialChannelName?: string | null;
   initialStoreId?: string | null;
-  stores: { id: string; name: string; channel_id: string; channels?: { name: string } }[];
+  stores: StoreOpt[];
+  channels: ChannelOpt[];
+  role: "super_admin" | "admin" | "channel_admin";
 }) {
   const router = useRouter();
+  const isChannelAdmin = role === "channel_admin";
   const [rows, setRows] = useState(initialRows);
   const [total, setTotal] = useState(initialTotal);
   const [q, setQ] = useState(initialQ);
   const [page, setPage] = useState(initialPage);
   const [channelId, setChannelId] = useState<string | null>(initialChannelId || null);
-  const [channelName] = useState<string | null>(initialChannelName || null);
   const [storeId, setStoreId] = useState<string | null>(initialStoreId || null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -48,24 +51,54 @@ export function EndUsersClient({
   const [delTarget, setDelTarget] = useState<any>(null);
   const [, start] = useTransition();
 
-  const filteredStore = storeId ? stores.find(s => s.id === storeId) : null;
+  // 店铺下拉随渠道联动
+  const storesInChannel = useMemo(() => {
+    if (!channelId) return stores;
+    return stores.filter(s => s.channel_id === channelId);
+  }, [stores, channelId]);
+
+  function syncUrl(nextChannel: string | null, nextStore: string | null, nextQ: string) {
+    const sp = new URLSearchParams();
+    if (nextChannel) sp.set("channel_id", nextChannel);
+    if (nextStore) sp.set("store_id", nextStore);
+    if (nextQ) sp.set("q", nextQ);
+    router.replace(`/end-users${sp.toString() ? "?" + sp.toString() : ""}`);
+  }
 
   function reload(nextQ = q, nextPage = page, nextChannelId = channelId, nextStoreId = storeId) {
     start(async () => {
-      const { rows: r, total: t } = await listEndUsers({ q: nextQ, channel_id: nextChannelId, store_id: nextStoreId, page: nextPage, pageSize: 20 });
+      const { rows: r, total: t } = await listEndUsers({
+        q: nextQ, channel_id: nextChannelId, store_id: nextStoreId, page: nextPage, pageSize: 20
+      });
       setRows(r); setTotal(t);
     });
   }
 
-  function clearFilters() {
-    setChannelId(null); setStoreId(null); setPage(1);
-    router.replace("/end-users");
-    reload(q, 1, null, null);
+  function onChannelChange(v: string | null) {
+    setChannelId(v); setPage(1);
+    // 切换渠道时若当前店铺不在新渠道下, 自动清空
+    let nextStore = storeId;
+    if (v && storeId) {
+      const inList = stores.find(s => s.id === storeId);
+      if (!inList || inList.channel_id !== v) {
+        nextStore = null;
+        setStoreId(null);
+      }
+    }
+    syncUrl(v, nextStore, q);
+    reload(q, 1, v, nextStore);
+  }
+
+  function onStoreChange(v: string | null) {
+    setStoreId(v); setPage(1);
+    syncUrl(channelId, v, q);
+    reload(q, 1, channelId, v);
   }
 
   function onSearch(v: string) {
     setQ(v); setPage(1);
-    reload(v, 1);
+    syncUrl(channelId, storeId, v);
+    reload(v, 1, channelId, storeId);
   }
 
   function onCreate() { setEditing(null); setFormOpen(true); }
@@ -107,29 +140,53 @@ export function EndUsersClient({
           createLabel="新增用户"
           onImport={() => setImportOpen(true)}
           onExport={onExport}
-          placeholder="搜索姓名/电话…"
+          placeholder="搜索姓名/电话/登录账号…"
+          rightExtra={
+            !isChannelAdmin && (
+              <Combobox
+                options={channels.map(c => ({ value: c.id, label: c.name }))}
+                value={channelId}
+                onChange={onChannelChange}
+                placeholder="全部渠道"
+                searchPlaceholder="搜索渠道…"
+                emptyText="无匹配渠道"
+                triggerClassName="h-9 w-40"
+                clearable
+              />
+            )
+          }
         />
 
-        {(channelName || filteredStore) && (
-          <div className="-mt-1 mb-3 flex items-center gap-2 rounded-lg border border-primary/30 bg-accent/40 px-3 py-2 text-xs">
-            <Filter className="h-3.5 w-3.5 text-primary" />
-            <span className="text-muted-foreground">已筛选：</span>
-            {channelName && <Badge variant="default" className="font-medium">渠道 · {channelName}</Badge>}
-            {filteredStore && <Badge variant="default" className="font-medium">店铺 · {filteredStore.name}</Badge>}
-            <button
-              onClick={clearFilters}
-              className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            >
-              <X className="h-3 w-3" /> 清除筛选
-            </button>
-          </div>
-        )}
+        {/* 店铺筛选 (与渠道联动) */}
+        <div className="-mt-1 mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">店铺筛选</span>
+          <Combobox
+            key={`store-filter-${channelId || "all"}`}
+            options={storesInChannel.map(s => ({
+              value: s.id,
+              label: s.name,
+              hint: !channelId ? s.channels?.name : undefined
+            }))}
+            value={storeId}
+            onChange={onStoreChange}
+            placeholder={channelId ? `「${channels.find(c => c.id === channelId)?.name}」下的全部店铺` : "全部店铺"}
+            searchPlaceholder="搜索店铺名…"
+            emptyText={channelId ? "该渠道下暂无店铺" : "暂无店铺"}
+            triggerClassName="h-9 w-64"
+            clearable
+          />
+          {channelId && (
+            <span className="text-[11px] text-primary">
+              · 已联动: 仅显示该渠道下 {storesInChannel.length} 家店铺
+            </span>
+          )}
+        </div>
 
         {rows.length === 0 ? (
           <EmptyState
             icon={Users}
-            title="还没有普通用户"
-            description="点击右上角「新增用户」或批量导入开始"
+            title="还没有匹配的用户"
+            description={(channelId || storeId || q) ? "试试清除筛选条件" : "点击右上角「新增用户」或批量导入开始"}
           />
         ) : (
           <Table>

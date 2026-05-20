@@ -99,12 +99,18 @@ supabase/
 ## 本地开发
 
 ```bash
-pnpm install            # 或 npm i
-cp .env.example .env.local  # 填 Supabase 配置
-supabase start          # 启动本地 Postgres
-supabase db reset       # 跑 migration + seed
-pnpm dev                # http://localhost:3000
+pnpm install                       # 或 npm i
+cp .env.example .env.local         # 填 Supabase 配置
+supabase start                     # 本地 Postgres (端口 54421/54422/54423)
+supabase db reset                  # 跑 migration + seed
+pnpm dev                           # http://localhost:3006
 ```
+
+**端口分配** (避开常用占用)：
+- Web Dev:        `3006`
+- Supabase API:   `54421`
+- Supabase DB:    `54422`
+- Supabase Studio: `54423` → http://localhost:54423
 
 默认账号：`admin` / `admin123`
 

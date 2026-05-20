@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +40,25 @@ export function StoreForm({
     remark: initial?.remark || ""
   });
   const [pending, start] = useTransition();
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({
+      id: initial?.id,
+      channel_id: initial?.channel_id || lockedChannelId,
+      name: initial?.name || "",
+      province: initial?.province || null,
+      city: initial?.city || null,
+      district: initial?.district || null,
+      address: initial?.address || "",
+      contact_name: initial?.contact_name || "",
+      contact_phone: initial?.contact_phone || "",
+      device_count: initial?.device_count ?? 0,
+      status: initial?.status || "active",
+      remark: initial?.remark || ""
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial, open]);
 
   function submit() {
     if (!form.name.trim()) { toast.error("请填写店铺名称"); return; }

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition, useMemo } from "react";
+import { useEffect, useState, useTransition, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,6 +45,28 @@ export function AssessmentForm({
     status: initial?.status || "active"
   });
   const [pending, start] = useTransition();
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({
+      id: initial?.id,
+      project_id: initial?.project_id || null,
+      dimension: (initial?.dimension as AssessmentDimension) || "learning_attitude",
+      qtype: (initial?.qtype as AssessmentQType) || "single",
+      title: initial?.title || "",
+      options: Array.isArray(initial?.options) && initial.options.length
+        ? initial.options
+        : [
+            { label: "", value: "A" },
+            { label: "", value: "B" }
+          ],
+      answer: initial?.answer ?? (initial?.qtype === "multiple" ? [] : ""),
+      explanation: initial?.explanation || "",
+      score: initial?.score ?? null,
+      sort_order: initial?.sort_order ?? 0,
+      status: initial?.status || "active"
+    });
+  }, [initial, open]);
 
   const options = useMemo(() => form.options || [], [form.options]);
 

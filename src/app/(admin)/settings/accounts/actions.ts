@@ -19,7 +19,7 @@ export type AccountInput = {
   remark?: string | null;
 };
 
-export async function listAccounts(params: { q?: string; role?: string; status?: string; page?: number; pageSize?: number }) {
+export async function listAccounts(params: { q?: string; role?: string; status?: string; channel_id?: string | null; page?: number; pageSize?: number }) {
   requireAdmin();
   const sb = adminSupabase();
   const page = params.page || 1;
@@ -28,6 +28,7 @@ export async function listAccounts(params: { q?: string; role?: string; status?:
   if (params.q) qb = qb.or(`username.ilike.%${params.q}%,display_name.ilike.%${params.q}%`);
   if (params.role) qb = qb.eq("role", params.role);
   if (params.status) qb = qb.eq("status", params.status);
+  if (params.channel_id) qb = qb.eq("channel_id", params.channel_id);
   qb = qb.order("created_at", { ascending: false }).range((page - 1) * pageSize, page * pageSize - 1);
   const { data, count, error } = await qb;
   if (error) throw new Error(error.message);

@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +44,25 @@ export function EndUserForm({
     remark: initial?.remark || ""
   });
   const [pending, start] = useTransition();
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({
+      id: initial?.id,
+      store_id: initial?.store_id || "",
+      name: initial?.name || "",
+      phone: initial?.phone || "",
+      gender: initial?.gender || null,
+      age: initial?.age ?? null,
+      grade: initial?.grade || "",
+      school: initial?.school || "",
+      parent_name: initial?.parent_name || "",
+      parent_phone: initial?.parent_phone || "",
+      paid_amount: initial?.paid_amount ?? 0,
+      status: initial?.status || "active",
+      remark: initial?.remark || ""
+    });
+  }, [initial, open]);
 
   // 选择店铺时自动展示渠道名
   const selectedStore = useMemo(() => stores.find(st => st.id === form.store_id), [stores, form.store_id]);

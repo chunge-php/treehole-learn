@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +39,25 @@ export function ResourceForm({
     remark: initial?.remark || ""
   });
   const [pending, start] = useTransition();
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({
+      id: initial?.id,
+      type: (initial?.type as ResourceType) || defaultType || "text",
+      title: initial?.title || "",
+      cover_url: initial?.cover_url || "",
+      body: initial?.body || "",
+      media_url: initial?.media_url || "",
+      duration_sec: initial?.duration_sec ?? null,
+      file_size: initial?.file_size ?? null,
+      file_ext: initial?.file_ext || "",
+      category_id: initial?.category_id || null,
+      status: initial?.status || "online",
+      sort_order: initial?.sort_order ?? 0,
+      remark: initial?.remark || ""
+    });
+  }, [initial, open, defaultType]);
 
   function submit() {
     if (!form.title.trim()) { toast.error("请填写标题"); return; }

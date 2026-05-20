@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth";
 import { shortId } from "@/lib/utils";
+import bcrypt from "bcryptjs";
 
 export type ChannelInput = {
   id?: string;
@@ -16,6 +17,12 @@ export type ChannelInput = {
   contact_phone?: string | null;
   status?: "active" | "disabled";
   remark?: string | null;
+  // 仅新建时使用: 同步创建渠道管理员账号
+  admin_account?: {
+    username: string;
+    password: string;
+    display_name: string;
+  } | null;
 };
 
 export async function listChannels(params: { q?: string; status?: string; page?: number; pageSize?: number }) {
@@ -67,25 +74,72 @@ export async function upsertChannel(input: ChannelInput) {
       remark: input.remark
     }).eq("id", input.id);
     if (error) throw new Error(error.message);
-  } else {
-    const id = shortId("ch");
-    const { error } = await sb.from("channels").insert({
-      id,
-      name: input.name,
-      level_id: input.level_id,
-      province: input.province,
-      city: input.city,
-      district: input.district,
-      address: input.address,
-      contact_name: input.contact_name,
-      contact_phone: input.contact_phone,
-      status: input.status || "active",
-      remark: input.remark
+    revalidatePath("/channels");
+    return { ok: true, id: input.id };
+  }
+
+  // 新建
+  const id = shortId("ch");
+
+  // 如果带账号, 先校验账号合法性, 再原子地创建两条记录
+  if (input.admin_account) {
+    const a = input.admin_account;
+    if (!a.username.trim()) throw new Error("请填写管理员账号");
+    if (!a.password || a.password.length < 6) throw new Error("管理员密码至少 6 位");
+    if (!a.display_name.trim()) throw new Error("请填写管理员显示名");
+    const { data: existed } = await sb.from("accounts").select("id").eq("username", a.username.trim()).maybeSingle();
+    if (existed) throw new Error("管理员账号已存在");
+  }
+
+  const { error: chErr } = await sb.from("channels").insert({
+    id,
+    name: input.name,
+    level_id: input.level_id,
+    province: input.province,
+    city: input.city,
+    district: input.district,
+    address: input.address,
+    contact_name: input.contact_name,
+    contact_phone: input.contact_phone,
+    status: input.status || "active",
+    remark: input.remark
+  });
+  if (chErr) throw new Error(chErr.message);
+
+  if (input.admin_account) {
+    const a = input.admin_account;
+    const password_hash = await bcrypt.hash(a.password, 10);
+    const { error: accErr } = await sb.from("accounts").insert({
+      id: shortId("acc"),
+      username: a.username.trim(),
+      password_hash,
+      display_name: a.display_name.trim(),
+      role: "channel_admin",
+      channel_id: id,
+      status: "active"
     });
-    if (error) throw new Error(error.message);
+    if (accErr) {
+      // 账号创建失败 → 回滚渠道
+      await sb.from("channels").delete().eq("id", id);
+      throw new Error("创建管理员账号失败: " + accErr.message);
+    }
   }
   revalidatePath("/channels");
-  return { ok: true };
+  return { ok: true, id };
+}
+
+/** 渠道关联的管理员账号列表(用于编辑面板展示) */
+export async function getChannelAdmins(channel_id: string) {
+  requireAdmin();
+  const sb = adminSupabase();
+  const { data, error } = await sb
+    .from("accounts")
+    .select("id, username, display_name, status, last_login_at")
+    .eq("channel_id", channel_id)
+    .eq("role", "channel_admin")
+    .order("created_at");
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
 export async function deleteChannel(id: string) {

@@ -2,17 +2,17 @@ project_id = "treehole-learn"
 
 [api]
 enabled = true
-port = 55421
+port = 46421
 schemas = ["public", "storage"]
 
 [db]
-port = 55422
-shadow_port = 55420
+port = 46422
+shadow_port = 46420
 major_version = 15
 
 [studio]
 enabled = true
-port = 55423
+port = 46423
 
 [auth]
 enabled = true

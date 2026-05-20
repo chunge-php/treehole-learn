@@ -108,9 +108,9 @@ pnpm dev                           # http://localhost:3006
 
 **端口分配** (避开常用占用)：
 - Web Dev:        `3006`
-- Supabase API:   `55421`
-- Supabase DB:    `55422`
-- Supabase Studio: `55423` → http://localhost:55423
+- Supabase API:   `46421`
+- Supabase DB:    `46422`
+- Supabase Studio: `46423` → http://localhost:46423
 
 默认账号：`admin` / `admin123`
 

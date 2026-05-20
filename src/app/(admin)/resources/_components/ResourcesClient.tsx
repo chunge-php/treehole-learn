@@ -78,8 +78,7 @@ export function ResourcesClient({
     const data = rows.map(r => ({
       标题: r.title,
       类型: TYPE_LABEL[r.type as ResourceType] || r.type,
-      分类: r.top_types?.name || "",
-      分类ID: r.category_id || "",
+      分类名称: r.top_types?.name || "",
       封面: r.cover_url || "",
       正文: r.body || "",
       媒体地址: r.media_url || "",
@@ -88,8 +87,7 @@ export function ResourcesClient({
       扩展名: r.file_ext || "",
       排序: r.sort_order ?? 0,
       状态: r.status === "online" ? "上架" : "下架",
-      备注: r.remark || "",
-      创建时间: formatDateCN(r.created_at)
+      备注: r.remark || ""
     }));
     downloadExcel(data, `资源库导出_${new Date().getTime()}.xlsx`);
     toast.success("已导出当前页数据");

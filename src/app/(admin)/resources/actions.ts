@@ -102,21 +102,62 @@ export async function toggleResourceStatus(id: string, status: "online" | "offli
 export async function bulkImportResources(rows: Record<string, any>[]) {
   requireAdmin();
   const sb = adminSupabase();
+
+  // 分类名称 → id 映射 (top_types 二级)
+  const { data: levels = [] } = await sb.from("top_types").select("id, name, parent_id").not("parent_id", "is", null);
+  const categoryMap = new Map<string, string>();
+  (levels || []).forEach((t: any) => categoryMap.set(String(t.name).trim(), t.id));
+
   let success = 0;
   const errors: { row: number; message: string }[] = [];
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    const title = String(r["标题"] || r["title"] || "").trim();
+    const typeRaw = String(r["类型"] || r["type"] || "").trim();
+    const type = TYPE_FROM_CN[typeRaw] || (typeRaw as ResourceType);
+    if (!["text", "video", "file"].includes(type)) {
+      errors.push({ row: i + 2, message: `类型无效：${typeRaw || "空"}` });
+      continue;
+    }
+
+    let title = String(r["标题"] || r["title"] || "").trim();
+    const media_url = String(r["媒体地址"] || r["media_url"] || "").trim() || null;
+    // 文件类型: 标题为空时用文件名兜底
+    if (!title && type === "file" && media_url) {
+      const fname = media_url.split("/").pop() || "未命名文件";
+      title = fname.replace(/\.[^.]+$/, "");
+    }
     if (!title) {
       errors.push({ row: i + 2, message: "标题为空" });
       continue;
     }
-    const typeRaw = String(r["类型"] || r["type"] || "").trim();
-    const type = TYPE_FROM_CN[typeRaw] || (typeRaw as ResourceType);
-    if (!["text", "video", "file"].includes(type)) {
-      errors.push({ row: i + 2, message: `类型无效：${typeRaw}` });
+
+    // 必填字段校验
+    if (type === "text" && !String(r["正文"] || r["body"] || "").trim()) {
+      errors.push({ row: i + 2, message: "文本类型必填正文" });
       continue;
     }
+    if (type !== "text" && !media_url) {
+      errors.push({ row: i + 2, message: `${typeRaw}类型必填媒体地址` });
+      continue;
+    }
+
+    // 分类名称解析 (仅文本/视频)
+    let category_id: string | null = null;
+    if (type !== "file") {
+      const catName = String(r["分类名称"] || r["category_name"] || "").trim();
+      if (catName) {
+        category_id = categoryMap.get(catName) || null;
+        if (!category_id) {
+          errors.push({ row: i + 2, message: `分类「${catName}」不存在 (请先在'设置→顶级类型'中创建)` });
+          continue;
+        }
+      }
+    }
+
+    // 状态解析
+    const statusRaw = String(r["状态"] || r["status"] || "").trim();
+    const status: "online" | "offline" = (statusRaw === "下架" || statusRaw === "offline") ? "offline" : "online";
+
     const durRaw = r["时长秒"] ?? r["duration_sec"];
     const sizeRaw = r["文件大小"] ?? r["file_size"];
     const sortRaw = r["排序"] ?? r["sort_order"];
@@ -125,14 +166,14 @@ export async function bulkImportResources(rows: Record<string, any>[]) {
       id: shortId("rs"),
       type,
       title,
-      cover_url: r["封面"] || r["cover_url"] || null,
+      cover_url: type !== "file" ? (r["封面"] || r["cover_url"] || null) : null,
       body: type === "text" ? (r["正文"] || r["body"] || null) : null,
-      media_url: type !== "text" ? (r["媒体地址"] || r["media_url"] || null) : null,
+      media_url,
       duration_sec: type === "video" && durRaw != null && durRaw !== "" ? Number(durRaw) : null,
       file_size: type === "file" && sizeRaw != null && sizeRaw !== "" ? Number(sizeRaw) : null,
       file_ext: type === "file" ? (r["扩展名"] || r["file_ext"] || null) : null,
-      category_id: r["分类ID"] || r["category_id"] || null,
-      status: "online",
+      category_id,
+      status,
       sort_order: sortRaw != null && sortRaw !== "" ? Number(sortRaw) : 0,
       remark: r["备注"] || r["remark"] || null
     });

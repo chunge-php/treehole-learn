@@ -4,45 +4,38 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { DataToolbar } from "@/components/admin/DataToolbar";
 import { Pagination } from "@/components/admin/Pagination";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
-import { MoreHorizontal, Pencil, Trash2, Power, ClipboardList } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Power, ClipboardList, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { AssessmentForm } from "./AssessmentForm";
 import { ImportDialog } from "./ImportDialog";
 import { deleteAssessment, toggleAssessmentStatus, listAssessments } from "../actions";
-import { DIMENSION_LABEL, QTYPE_LABEL, type AssessmentDimension, type AssessmentQType } from "./constants";
+import { DIMENSIONS, QTYPES, DIMENSION_VARIANT, QTYPE_VARIANT } from "./constants";
 import { downloadExcel } from "@/lib/excel";
 import { toast } from "sonner";
 
-const DIM_VARIANT: Record<AssessmentDimension, "outline" | "success" | "warning" | "muted"> = {
-  learning_attitude: "warning",
-  learning_method: "success",
-  learning_ability: "outline",
-  learning_habit: "muted"
-};
-
 export function AssessmentsClient({
-  initialRows, initialTotal, initialQ, initialPage, projects
+  initialRows, initialTotal, initialQ, initialPage, projectSuggestions
 }: {
   initialRows: any[];
   initialTotal: number;
   initialQ: string;
   initialPage: number;
-  projects: { id: string; name: string }[];
+  projectSuggestions: string[];
 }) {
   const [rows, setRows] = useState(initialRows);
   const [total, setTotal] = useState(initialTotal);
   const [q, setQ] = useState(initialQ);
   const [page, setPage] = useState(initialPage);
-  const [dimension, setDimension] = useState<string>("");
-  const [qtype, setQtype] = useState<string>("");
+  const [dimension, setDimension] = useState<string | null>(null);
+  const [qtype, setQtype] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -70,16 +63,15 @@ export function AssessmentsClient({
 
   function onExport() {
     const data = rows.map(r => ({
-      题目: r.title,
-      维度: DIMENSION_LABEL[r.dimension as AssessmentDimension] || r.dimension,
-      题型: QTYPE_LABEL[r.qtype as AssessmentQType] || r.qtype,
-      选项: r.options ? JSON.stringify(r.options) : "",
-      答案: Array.isArray(r.answer) ? r.answer.join(",") : (r.answer ?? ""),
-      解析: r.explanation || "",
-      分值: r.score ?? "",
-      排序: r.sort_order ?? 0,
-      所属项目: r.top_types?.name || "",
-      项目ID: r.project_id || "",
+      序号: r.sort_order ?? 0,
+      题目标题: r.title,
+      描述: r.description || "",
+      封面: r.cover_url || "",
+      所属维度: r.dimension,
+      题型: r.qtype,
+      题目内容: r.options ? JSON.stringify(r.options) : "",
+      题目文件数: Array.isArray(r.media_urls) ? r.media_urls.length : 0,
+      所属项目: r.project_name || "",
       状态: r.status === "active" ? "正常" : "停用"
     }));
     downloadExcel(data, `测评题库导出_${new Date().getTime()}.xlsx`);
@@ -118,33 +110,29 @@ export function AssessmentsClient({
           createLabel="新增题目"
           onImport={() => setImportOpen(true)}
           onExport={onExport}
-          placeholder="搜索题目内容…"
+          placeholder="搜索题目标题/描述/项目…"
           rightExtra={
             <div className="flex items-center gap-2">
-              <Select value={dimension || "__all"} onValueChange={v => {
-                const nv = v === "__all" ? "" : v;
-                setDimension(nv); setPage(1); reload(q, 1, nv, qtype);
-              }}>
-                <SelectTrigger className="h-9 w-32"><SelectValue placeholder="全部维度" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all">全部维度</SelectItem>
-                  {(Object.keys(DIMENSION_LABEL) as AssessmentDimension[]).map(k => (
-                    <SelectItem key={k} value={k}>{DIMENSION_LABEL[k]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={qtype || "__all"} onValueChange={v => {
-                const nv = v === "__all" ? "" : v;
-                setQtype(nv); setPage(1); reload(q, 1, dimension, nv);
-              }}>
-                <SelectTrigger className="h-9 w-28"><SelectValue placeholder="全部题型" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all">全部题型</SelectItem>
-                  <SelectItem value="single">单选</SelectItem>
-                  <SelectItem value="multiple">多选</SelectItem>
-                  <SelectItem value="text">简答</SelectItem>
-                </SelectContent>
-              </Select>
+              <Combobox
+                options={DIMENSIONS.map(d => ({ value: d, label: d }))}
+                value={dimension}
+                onChange={v => { setDimension(v); setPage(1); reload(q, 1, v, qtype); }}
+                placeholder="全部维度"
+                triggerClassName="h-9 w-36"
+                searchPlaceholder="搜索维度…"
+                emptyText="无匹配"
+                clearable
+              />
+              <Combobox
+                options={QTYPES.map(q => ({ value: q, label: q }))}
+                value={qtype}
+                onChange={v => { setQtype(v); setPage(1); reload(q, 1, dimension, v); }}
+                placeholder="全部题型"
+                triggerClassName="h-9 w-32"
+                searchPlaceholder="搜索题型…"
+                emptyText="无匹配"
+                clearable
+              />
             </div>
           }
         />
@@ -159,35 +147,58 @@ export function AssessmentsClient({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[34%]">题目</TableHead>
+                <TableHead className="w-16 text-center">序号</TableHead>
+                <TableHead className="w-[32%]">题目</TableHead>
                 <TableHead>维度</TableHead>
                 <TableHead>题型</TableHead>
-                <TableHead>选项数</TableHead>
-                <TableHead>分值</TableHead>
+                <TableHead className="text-center">选项</TableHead>
+                <TableHead className="text-center">文件</TableHead>
                 <TableHead>所属项目</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(r => (
+              {rows.map(r => {
+                const media = Array.isArray(r.media_urls) ? r.media_urls : [];
+                const imgCount = media.filter((m: any) => (m.type || "").startsWith("image/")).length;
+                const videoCount = media.filter((m: any) => (m.type || "").startsWith("video/")).length;
+                return (
                 <TableRow key={r.id}>
+                  <TableCell className="text-center font-mono text-sm tabular-nums text-muted-foreground">{r.sort_order ?? "—"}</TableCell>
                   <TableCell>
-                    <div className="font-medium line-clamp-2">{r.title}</div>
-                    <div className="text-[11px] text-muted-foreground font-mono">#{r.seq_no}</div>
+                    <div className="flex items-start gap-2.5">
+                      {r.cover_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={r.cover_url} alt="" className="h-10 w-10 rounded object-cover bg-muted shrink-0" onError={(e: any) => { e.target.style.display = "none"; }} />
+                      ) : null}
+                      <div className="min-w-0">
+                        <div className="font-medium line-clamp-2">{r.title}</div>
+                        {r.description && <div className="text-[11px] text-muted-foreground line-clamp-1">{r.description}</div>}
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={DIM_VARIANT[r.dimension as AssessmentDimension] || "outline"}>
-                      {DIMENSION_LABEL[r.dimension as AssessmentDimension] || r.dimension}
-                    </Badge>
+                    <Badge variant={DIMENSION_VARIANT[r.dimension] || "outline"}>{r.dimension}</Badge>
                   </TableCell>
-                  <TableCell className="text-sm">{QTYPE_LABEL[r.qtype as AssessmentQType] || r.qtype}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {r.qtype === "text" ? "—" : (Array.isArray(r.options) ? r.options.length : 0)}
+                  <TableCell>
+                    <Badge variant={QTYPE_VARIANT[r.qtype] || "outline"}>{r.qtype}</Badge>
                   </TableCell>
-                  <TableCell className="text-sm">{r.score ?? "—"}</TableCell>
+                  <TableCell className="text-center text-sm tabular-nums text-muted-foreground">
+                    {r.qtype === "语音题" ? "—" : (Array.isArray(r.options) ? r.options.length : 0)}
+                  </TableCell>
+                  <TableCell className="text-center text-sm text-muted-foreground">
+                    {imgCount + videoCount === 0 ? (
+                      <span className="opacity-40">—</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5">
+                        {imgCount > 0 && <span className="inline-flex items-center gap-0.5"><ImageIcon className="h-3 w-3" />{imgCount}</span>}
+                        {videoCount > 0 && <span className="inline-flex items-center gap-0.5"><VideoIcon className="h-3 w-3" />{videoCount}</span>}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {r.top_types?.name || <span className="text-xs">—</span>}
+                    {r.project_name || <span className="text-xs">—</span>}
                   </TableCell>
                   <TableCell><StatusBadge status={r.status} /></TableCell>
                   <TableCell className="text-right">
@@ -210,7 +221,8 @@ export function AssessmentsClient({
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         )}
@@ -222,7 +234,7 @@ export function AssessmentsClient({
         open={formOpen}
         onOpenChange={setFormOpen}
         initial={editing}
-        projects={projects}
+        projectSuggestions={projectSuggestions}
         onSaved={() => reload()}
       />
       <ImportDialog
@@ -234,7 +246,7 @@ export function AssessmentsClient({
         open={!!delTarget}
         onOpenChange={v => !v && setDelTarget(null)}
         title="删除测评题"
-        description={`确定要删除该题目「${(delTarget?.title || "").slice(0, 30)}…」吗？此操作不可恢复。`}
+        description={`确定要删除该题目「${(delTarget?.title || "").slice(0, 30)}」吗？此操作不可恢复。`}
         confirmText="确认删除"
         destructive
         onConfirm={onDelete}

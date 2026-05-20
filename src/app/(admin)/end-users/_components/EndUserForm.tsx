@@ -176,24 +176,37 @@ export function EndUserForm({
             />
           </div>
 
-          {/* 2. 归属店铺 */}
+          {/* 2. 归属店铺 (与渠道联动) */}
           <div className="space-y-1.5">
             <Label className="flex items-center gap-1.5"><Store className="h-3.5 w-3.5 text-muted-foreground" /> 归属店铺</Label>
             <Combobox
+              // key 绑定 channelId, 切换渠道时强制重新挂载 Combobox, 清空内部搜索词
+              key={`store-${channelId || "all"}`}
               options={storesInChannel.map(s => ({
                 value: s.id,
                 label: s.name,
-                hint: s.channels?.name
+                hint: !channelId ? s.channels?.name : undefined
               }))}
               value={form.store_id || null}
               onChange={v => setForm({ ...form, store_id: v })}
-              placeholder={channelId ? "选择该渠道下的店铺" : "选择店铺 (可留空)"}
+              placeholder={
+                channelId
+                  ? `请选择「${channels.find(c => c.id === channelId)?.name || ""}」下的店铺`
+                  : "请先选择渠道 (或留空创建无关联用户)"
+              }
               searchPlaceholder="搜索店铺名…"
               emptyText={channelId ? "该渠道下暂无店铺" : "暂无店铺"}
               clearable
             />
-            {form.store_id && storesInChannel.find(s => s.id === form.store_id)?.channels?.name && (
-              <p className="text-[11px] text-muted-foreground">店铺归属: {storesInChannel.find(s => s.id === form.store_id)?.channels?.name}</p>
+            {channelId ? (
+              <p className="text-[11px] text-primary flex items-center gap-1">
+                <Store className="h-3 w-3" />
+                已联动: 仅显示「{channels.find(c => c.id === channelId)?.name}」下的 <span className="font-semibold tabular-nums">{storesInChannel.length}</span> 家店铺
+              </p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                未选择渠道时显示全部 {stores.length} 家店铺 (右侧灰字为所属渠道)
+              </p>
             )}
           </div>
 

@@ -177,6 +177,14 @@ export async function bulkImportStores(rows: Record<string, any>[]) {
   const s = requireSession();
   const sb = adminSupabase();
 
+  // channel_admin 模式: 预先取出自己渠道名称, 用于校验导入文件
+  let ownChannelName: string | null = null;
+  if (s.role === "channel_admin" && s.channel_id) {
+    const { data } = await sb.from("channels").select("name").eq("id", s.channel_id).maybeSingle();
+    ownChannelName = data?.name || null;
+  }
+
+
   // 取渠道名称 → id 映射，channel_admin 锁死自己渠道
   const lockedChannelId = s.role === "channel_admin" ? s.channel_id : scopedWriteChannelId(s);
   const { data: chs = [] } = await sb.from("channels").select("id, name");
@@ -200,9 +208,20 @@ export async function bulkImportStores(rows: Record<string, any>[]) {
       continue;
     }
 
+    const chName = String(r["所属渠道名称"] || r["channel_name"] || "").trim();
     let channel_id: string | null = lockedChannelId || null;
-    if (!channel_id) {
-      const chName = String(r["所属渠道名称"] || r["channel_name"] || "").trim();
+
+    // channel_admin 校验: 填了'所属渠道名称'必须与自己渠道一致
+    if (s.role === "channel_admin") {
+      if (chName && ownChannelName && chName !== ownChannelName) {
+        errors.push({
+          row: i + 2,
+          message: `渠道商账号只能导入本渠道(${ownChannelName})数据, 本行所属渠道「${chName}」与您所在渠道不符`
+        });
+        continue;
+      }
+      // 强制使用自己渠道 (即使 chName 为空也走自己渠道)
+    } else if (!channel_id) {
       // admin 模式下允许留空 (创建无关联渠道的店铺)
       if (chName) {
         channel_id = channelMap.get(chName) || null;

@@ -172,13 +172,13 @@ export function ReportView({ report, sessionId, mode = "admin" }: { report: any;
     </div>
   );
   push(
-    <table className="w-full border-collapse text-xs">
+    <table className="w-full border-collapse text-[13px]">
       <thead>
         <tr className="bg-slate-100 text-slate-700">
           <th className="p-2 text-left">八维学格</th>
           <th className="p-2 text-left" colSpan={3}>组合规则 <span className="font-normal text-muted-foreground">（l-表示低 &nbsp; h-表示高）</span></th>
         </tr>
-        <tr className="text-[11px] text-muted-foreground">
+        <tr className="text-[12px] text-muted-foreground">
           <td className="p-1"></td>
           <td className="p-1 text-center">多模态<br />Eh/El</td>
           <td className="p-1 text-center">多元性向R<br />Rh/Rl</td>
@@ -190,7 +190,7 @@ export function ReportView({ report, sessionId, mode = "admin" }: { report: any;
           const cur = row.label === report.value3?.title;
           return (
             <tr key={row.label} className={"border-t " + (cur ? "bg-primary/10" : "")}>
-              <td className="p-2"><div className={"font-medium " + (cur ? "text-primary" : "text-slate-700")}>{row.label}</div><div className="text-[11px] text-muted-foreground">{row.value}</div></td>
+              <td className="p-2"><div className={"font-medium " + (cur ? "text-primary" : "text-slate-700")}>{row.label}</div><div className="text-[12px] text-muted-foreground">{row.value}</div></td>
               <td className="p-2 text-center">{row.a}</td><td className="p-2 text-center">{row.b}</td><td className="p-2 text-center">{row.c}</td>
             </tr>
           );

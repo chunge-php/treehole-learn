@@ -1,0 +1,33 @@
+<?php 
+return [
+    [
+        'name'=>'阅读能力',
+        'subitems'=>'语文辞意推理',
+        'number'=>48
+    ],
+    [
+        'name'=>'阅读能力',
+        'subitems'=>'中文语法结构',
+        'number'=>57
+    ],
+    [
+        'name'=>'逻辑思维',
+        'subitems'=>'抽象逻辑推理',
+        'number'=>42
+    ],
+    [
+        'name'=>'逻辑思维',
+        'subitems'=>'数字概念推理',
+        'number'=>64
+    ],
+    [
+        'name'=>'逻辑思维',
+        'subitems'=>'立体空间推理',
+        'number'=>51
+    ],
+    [
+        'name'=>'专注力',
+        'subitems'=>'知觉速度统合',
+        'number'=>49
+    ],
+];

@@ -66,7 +66,10 @@ function rankData(scoresCake: any[]) {
 
 const SecTitle = ({ n, title }: { n: string; title: string }) => (
   <h2 className="mb-2 mt-1 text-lg font-bold text-primary">
-    <span className="px-0.5" style={{ backgroundImage: "linear-gradient(transparent 56%, hsl(var(--primary) / 0.28) 56%)" }}>{n}、{title}</span>
+    <span className="relative inline-block px-1">
+      <span aria-hidden className="absolute inset-x-0 bottom-[0.06em] h-[0.5em] rounded bg-primary/45" />
+      <span className="relative">{n}、{title}</span>
+    </span>
   </h2>
 );
 const H3 = ({ children }: { children: React.ReactNode }) => <h3 className="font-bold text-slate-800">{children}</h3>;
@@ -168,7 +171,10 @@ export function ReportView({ report, sessionId, mode = "admin" }: { report: any;
   push(
     <div className="flex items-baseline gap-2 whitespace-nowrap py-1">
       <span className="shrink-0 text-slate-600">经过测评您在八维学格类型中属于：</span>
-      <span className="shrink-0 px-1 text-3xl font-extrabold leading-tight" style={{ color: ORANGE, backgroundImage: `linear-gradient(transparent 60%, ${ORANGE}33 60%)` }}>{report.value3?.title || ""}</span>
+      <span className="relative inline-block shrink-0 px-1 text-3xl font-extrabold leading-tight" style={{ color: ORANGE }}>
+        <span aria-hidden className="absolute inset-x-0 bottom-[0.05em] h-[0.42em] rounded" style={{ background: ORANGE + "66" }} />
+        <span className="relative">{report.value3?.title || ""}</span>
+      </span>
     </div>
   );
   push(

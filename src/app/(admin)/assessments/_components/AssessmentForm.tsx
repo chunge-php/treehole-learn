@@ -18,13 +18,29 @@ import {
 } from "../actions";
 import { DIMENSIONS, QTYPES, type AssessmentDimension, type AssessmentQType } from "./constants";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle2, AlertCircle, ImagePlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type SortCheck = { status: "idle" | "checking" | "available" | "taken"; reason?: string };
 
 function nextLetter(idx: number) {
   return String.fromCharCode(65 + idx);
+}
+
+function inferMediaType(url: string): "image" | "video" {
+  return /\.(mp4|webm|mov|avi|mkv|m4v)(\?|#|$)/i.test(url) ? "video" : "image";
+}
+
+/** 兼容旧数据: label 直接是图片/视频 URL 时, 归一到 media_url */
+function normalizeOptions(opts: any[]): AssessmentOption[] {
+  return (opts || []).map((o, idx) => {
+    const value = o?.value || nextLetter(idx);
+    const label = String(o?.label ?? "");
+    if (!o?.media_url && /^https?:\/\/\S+\.(png|jpe?g|gif|webp|bmp|svg|mp4|webm|mov|avi|mkv|m4v)(\?|#|$)/i.test(label.trim())) {
+      return { value, label: "", media_url: label.trim(), media_type: inferMediaType(label) };
+    }
+    return { ...o, value, label };
+  });
 }
 
 export function AssessmentForm({
@@ -48,7 +64,7 @@ export function AssessmentForm({
     dimension: (initial?.dimension as AssessmentDimension) || "自陈量表",
     qtype: (initial?.qtype as AssessmentQType) || "单选题",
     options: Array.isArray(initial?.options) && initial.options.length
-      ? initial.options
+      ? normalizeOptions(initial.options)
       : [{ label: "", value: "A" }, { label: "", value: "B" }],
     answer: initial?.answer || "",
     sort_order: initial?.sort_order ?? 0,
@@ -56,6 +72,15 @@ export function AssessmentForm({
   });
   const [pending, start] = useTransition();
   const [sortCheck, setSortCheck] = useState<SortCheck>({ status: "idle" });
+  // 哪些选项展开了「图片/视频」编辑区
+  const [mediaOpen, setMediaOpen] = useState<Set<number>>(new Set());
+  function toggleMedia(idx: number) {
+    setMediaOpen(prev => {
+      const n = new Set(prev);
+      n.has(idx) ? n.delete(idx) : n.add(idx);
+      return n;
+    });
+  }
 
   // 创建模式: 拉取下一个可用序号
   useEffect(() => {
@@ -272,36 +297,86 @@ export function AssessmentForm({
                 {(form.options || []).map((o, idx) => {
                   const v = o.value || nextLetter(idx);
                   const isAnswer = form.answer === v;
+                  const hasMedia = !!o.media_url;
+                  const showMedia = hasMedia || mediaOpen.has(idx);
                   return (
                     <div
                       key={idx}
                       className={cn(
-                        "flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors",
+                        "rounded-md px-1.5 py-1 transition-colors",
                         isAnswer && "bg-success/10 ring-1 ring-success/30"
                       )}
                     >
-                      <input
-                        type="radio"
-                        name="th-correct-answer"
-                        checked={isAnswer}
-                        onChange={() => setForm({ ...form, answer: v })}
-                        className="h-3.5 w-3.5 accent-success cursor-pointer"
-                        title="标记为正确答案"
-                      />
-                      <Badge
-                        variant={isAnswer ? "success" : "outline"}
-                        className="font-mono w-8 justify-center shrink-0"
-                      >{v}</Badge>
-                      <Input
-                        value={o.label}
-                        onChange={e => setOption(idx, { label: e.target.value })}
-                        placeholder={`选项 ${v} 内容`}
-                        className="flex-1 h-8"
-                      />
-                      {form.qtype === "单选题" && (form.options?.length || 0) > 2 && (
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removeOption(idx)} className="h-8 w-8">
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="th-correct-answer"
+                          checked={isAnswer}
+                          onChange={() => setForm({ ...form, answer: v })}
+                          className="h-3.5 w-3.5 accent-success cursor-pointer"
+                          title="标记为正确答案"
+                        />
+                        <Badge
+                          variant={isAnswer ? "success" : "outline"}
+                          className="font-mono w-8 justify-center shrink-0"
+                        >{v}</Badge>
+                        <Input
+                          value={o.label}
+                          onChange={e => setOption(idx, { label: e.target.value })}
+                          placeholder={`选项 ${v} 文字 (可只配图)`}
+                          className="flex-1 h-8"
+                        />
+                        <Button
+                          type="button"
+                          variant={showMedia ? "secondary" : "ghost"}
+                          size="icon"
+                          onClick={() => toggleMedia(idx)}
+                          className="h-8 w-8 shrink-0"
+                          title="添加图片/视频"
+                        >
+                          <ImagePlus className={cn("h-3.5 w-3.5", hasMedia && "text-primary")} />
                         </Button>
+                        {form.qtype === "单选题" && (form.options?.length || 0) > 2 && (
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeOption(idx)} className="h-8 w-8">
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+
+                      {showMedia && (
+                        <div className="mt-2 ml-[3.25rem] mr-1 space-y-2">
+                          <UploadField
+                            value={o.media_url || ""}
+                            onChange={url => setOption(idx, {
+                              media_url: url || undefined,
+                              media_type: url ? inferMediaType(url) : undefined
+                            })}
+                            accept="image/*,video/*"
+                            pickerKinds={["image", "video"]}
+                            prefix="opt"
+                            preview={false}
+                            placeholder="选项图片/视频: 粘贴 URL / 上传 / 素材库"
+                          />
+                          {hasMedia && (
+                            <div className="relative inline-block rounded-lg border bg-muted/20 p-1.5">
+                              {o.media_type === "video" ? (
+                                // eslint-disable-next-line jsx-a11y/media-has-caption
+                                <video src={o.media_url} className="max-h-24 rounded" controls />
+                              ) : (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={o.media_url} alt="" className="max-h-24 rounded object-contain" onError={(e: any) => { e.target.style.opacity = ".3"; }} />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => { setOption(idx, { media_url: undefined, media_type: undefined }); toggleMedia(idx); }}
+                                className="absolute -right-2 -top-2 rounded-full bg-destructive p-0.5 text-white shadow"
+                                title="移除媒体"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   );
@@ -312,6 +387,7 @@ export function AssessmentForm({
                 {form.qtype === "单选题" && !form.answer && (
                   <p className="text-[11px] text-muted-foreground">点击选项左侧圆点标记一个为正确答案 (量表题可不选)</p>
                 )}
+                <p className="text-[11px] text-muted-foreground">每个选项可填文字, 也可点 <ImagePlus className="inline h-3 w-3 -mt-0.5" /> 配图片/视频 (素材库选择或上传), 二者可并存</p>
               </div>
             </div>
           )}

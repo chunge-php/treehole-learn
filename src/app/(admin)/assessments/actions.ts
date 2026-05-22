@@ -30,8 +30,10 @@ function parseMediaUrlsCell(cell: any): { url: string; type: string; name?: stri
 }
 
 export type AssessmentOption = {
-  label: string;
+  label: string;            // 文字内容 (可空, 图片/视频选项可只配媒体)
   value: string;
+  media_url?: string;       // 选项图片/视频 URL (素材库选择或上传)
+  media_type?: "image" | "video";
   score?: number;
   explanation?: string;
 };

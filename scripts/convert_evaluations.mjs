@@ -111,9 +111,15 @@ for (const line of lines) {
       const arr = JSON.parse(optionsRaw);
       if (Array.isArray(arr)) {
         options = arr.map((o, idx) => {
-          const label = String(o.parse ?? o.label ?? "").trim();
-          if (/^https?:\/\//i.test(label)) stats.imgOption++;
-          return { label, value: String(o.name ?? o.value ?? String.fromCharCode(65 + idx)).trim() };
+          const raw = String(o.parse ?? o.label ?? "").trim();
+          const value = String(o.name ?? o.value ?? String.fromCharCode(65 + idx)).trim();
+          // 选项内容是图片/视频 URL: 放进 media_url, label 留空
+          if (/^https?:\/\//i.test(raw)) {
+            stats.imgOption++;
+            const media_type = /\.(mp4|webm|mov|avi|mkv|m4v)(\?|#|$)/i.test(raw) ? "video" : "image";
+            return { label: "", value, media_url: raw, media_type };
+          }
+          return { label: raw, value };
         });
       }
     } catch { /* 保底空 */ }

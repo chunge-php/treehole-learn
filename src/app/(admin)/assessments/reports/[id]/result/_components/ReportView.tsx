@@ -110,9 +110,9 @@ export function ReportView({ report, sessionId, mode = "admin" }: { report: any;
   // ——— echarts ———
   const grad = (from: string, to: string) => ({ type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: from }, { offset: 1, color: to }] });
   const pieOption = {
-    legend: { orient: "vertical", right: 0, top: "center", itemWidth: 12, itemHeight: 12, textStyle: { fontSize: 11 } },
+    legend: { orient: "vertical", right: 4, top: "center", itemWidth: 16, itemHeight: 16, itemGap: 12, textStyle: { fontSize: 14, color: "#444" } },
     tooltip: { trigger: "item" },
-    series: [{ type: "pie", radius: [34, 96], center: ["34%", "50%"], roseType: "area", itemStyle: { borderRadius: 2 }, data: pieData, color: ROSE_PALETTE, label: { fontSize: 10, color: "#666" }, labelLine: { length: 8, length2: 8 } }],
+    series: [{ type: "pie", radius: [46, 128], center: ["36%", "50%"], roseType: "area", itemStyle: { borderRadius: 2 }, data: pieData, color: ROSE_PALETTE, label: { fontSize: 14, color: "#555" }, labelLine: { length: 14, length2: 14 } }],
   };
   const barOption = {
     grid: { top: 30, left: 36, right: 16, bottom: 24 },
@@ -162,7 +162,7 @@ export function ReportView({ report, sessionId, mode = "admin" }: { report: any;
     </div>
   );
   push(<H3>各维度数据展示</H3>);
-  push(<ChartBlock height={260} option={pieOption} />);
+  push(<ChartBlock height={340} option={pieOption} />);
 
   push(<SecTitle n="二" title="综合结论与类型界定" />);
   push(

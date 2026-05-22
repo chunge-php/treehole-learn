@@ -32,15 +32,15 @@ function inferMediaType(url: string): "image" | "video" {
   return /\.(mp4|webm|mov|avi|mkv|m4v)(\?|#|$)/i.test(url) ? "video" : "image";
 }
 
-/** 兼容旧数据: label 直接是图片/视频 URL 时, 归一到 media_url */
+/** 兼容旧数据: label 直接是图片/视频 URL(任何裸链接) 时, 归一到 media_url */
 function normalizeOptions(opts: any[]): AssessmentOption[] {
   return (opts || []).map((o, idx) => {
     const value = o?.value || nextLetter(idx);
-    const label = String(o?.label ?? "");
-    if (!o?.media_url && /^https?:\/\/\S+\.(png|jpe?g|gif|webp|bmp|svg|mp4|webm|mov|avi|mkv|m4v)(\?|#|$)/i.test(label.trim())) {
-      return { value, label: "", media_url: label.trim(), media_type: inferMediaType(label) };
+    const label = String(o?.label ?? "").trim();
+    if (!o?.media_url && /^https?:\/\/\S+$/i.test(label)) {
+      return { value, label: "", media_url: label, media_type: inferMediaType(label) };
     }
-    return { ...o, value, label };
+    return { ...o, value, label: String(o?.label ?? "") };
   });
 }
 
@@ -150,7 +150,7 @@ export function AssessmentForm({
     if (sortCheck.status === "taken") { toast.error(sortCheck.reason || "序号冲突"); return; }
     start(async () => {
       try {
-        await upsertAssessment(form);
+        await upsertAssessment({ ...form, options: normalizeOptions(form.options || []) });
         toast.success(isEdit ? "已更新" : "已创建");
         onOpenChange(false);
         onSaved?.();

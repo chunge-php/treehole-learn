@@ -66,7 +66,7 @@ function rankData(scoresCake: any[]) {
 
 const SecTitle = ({ n, title }: { n: string; title: string }) => (
   <h2 className="mb-2 mt-1 text-lg font-bold text-primary">
-    <span className="rounded bg-primary/15 px-2 py-1 box-decoration-clone">{n}、{title}</span>
+    <span className="px-0.5" style={{ backgroundImage: "linear-gradient(transparent 56%, hsl(var(--primary) / 0.28) 56%)" }}>{n}、{title}</span>
   </h2>
 );
 const H3 = ({ children }: { children: React.ReactNode }) => <h3 className="font-bold text-slate-800">{children}</h3>;
@@ -168,7 +168,7 @@ export function ReportView({ report, sessionId, mode = "admin" }: { report: any;
   push(
     <div className="flex items-baseline gap-2 whitespace-nowrap py-1">
       <span className="shrink-0 text-slate-600">经过测评您在八维学格类型中属于：</span>
-      <span className="shrink-0 rounded px-2 text-2xl font-extrabold leading-tight" style={{ color: ORANGE, background: ORANGE + "1f" }}>{report.value3?.title || ""}</span>
+      <span className="shrink-0 px-1 text-3xl font-extrabold leading-tight" style={{ color: ORANGE, backgroundImage: `linear-gradient(transparent 60%, ${ORANGE}33 60%)` }}>{report.value3?.title || ""}</span>
     </div>
   );
   push(

@@ -63,6 +63,7 @@ export function ChannelsClient({
       编号: r.seq_no ?? "",
       级别: r.channel_levels?.name || "",
       归属地区: [r.province, r.city, r.district].filter(Boolean).join(" · "),
+      详细地址: r.address || "",
       联系人: r.contact_name || "",
       联系电话: r.contact_phone || "",
       店铺数: r._store_count ?? 0,
@@ -121,7 +122,7 @@ export function ChannelsClient({
               <TableRow>
                 <TableHead>渠道</TableHead>
                 <TableHead>级别</TableHead>
-                <TableHead>归属地区</TableHead>
+                <TableHead>归属地区 / 详细地址</TableHead>
                 <TableHead>联系人</TableHead>
                 <TableHead className="text-center">店铺</TableHead>
                 <TableHead className="text-center">用户</TableHead>
@@ -140,8 +141,9 @@ export function ChannelsClient({
                   <TableCell>
                     {r.channel_levels?.name ? <Badge variant="outline">{r.channel_levels.name}</Badge> : <span className="text-muted-foreground text-xs">—</span>}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {[r.province, r.city, r.district].filter(Boolean).join(" · ") || "—"}
+                  <TableCell>
+                    <div className="text-sm text-muted-foreground">{[r.province, r.city, r.district].filter(Boolean).join(" · ") || "—"}</div>
+                    {r.address && <div className="text-[11px] text-muted-foreground/80 max-w-[220px] truncate" title={r.address}>{r.address}</div>}
                   </TableCell>
                   <TableCell>
                     {r.contact_name ? (

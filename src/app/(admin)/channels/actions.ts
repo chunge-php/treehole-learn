@@ -274,7 +274,7 @@ export async function bulkImportChannels(rows: Record<string, any>[]) {
       province: r["省"] || r["province"] || null,
       city: r["市"] || r["city"] || null,
       district: r["区"] || r["district"] || null,
-      address: r["地址"] || r["address"] || null,
+      address: r["详细地址"] || r["地址"] || r["address"] || null,
       contact_name: r["联系人"] || r["contact_name"] || null,
       contact_phone: r["联系电话"] || r["contact_phone"] || null,
       remark: r["备注"] || r["remark"] || null

@@ -16,7 +16,7 @@ export function ImportDialog({ open, onOpenChange, onDone }: { open: boolean; on
         { key: "province", label: "省", example: "北京市" },
         { key: "city", label: "市", example: "北京市" },
         { key: "district", label: "区", example: "海淀区" },
-        { key: "address", label: "地址", example: "中关村大街1号" },
+        { key: "address", label: "详细地址", example: "中关村大街1号" },
         { key: "contact_name", label: "联系人", example: "李明" },
         { key: "contact_phone", label: "联系电话", example: "13800138000" },
         { key: "admin_username", label: "登录账号", example: "qiming001" },

@@ -39,7 +39,7 @@ function LoginInner() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(120%_80%_at_50%_0%,#E6F8F0_0%,#FFFFFF_60%)]">
+    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(120%_80%_at_50%_0%,#E6F1FB_0%,#FFFFFF_60%)]">
       {/* 背景装饰 */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-primary/15 blur-3xl" />

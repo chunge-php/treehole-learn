@@ -1,17 +1,26 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { EChart } from "@/components/admin/EChart";
 import { ArrowLeft, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-const RIASEC_COLOR: Record<string, string> = {
-  R: "#4CA95E", I: "#02D1D4", A: "#2580CA", S: "#BB1228", E: "#AF8E40", C: "#9D6CDB",
-};
-const ROSE_PALETTE = ["#57DCC1", "#E04372", "#F6B901", "#7A4BFE", "#2E9AEB", "#7DD900", "#455DEF", "#CB40E4", "#FFEB3B"];
+// A4 @96dpi
+const PAGE_W = 794;
+const PAGE_H = 1123;
+const PAD = 44;
+const HEADER_H = 54;
+const FOOTER_H = 30;
+const CONTENT_W = PAGE_W - PAD * 2;
+const CONTENT_H = PAGE_H - PAD * 2 - HEADER_H - FOOTER_H;
 
-// 八维学格组合规则表 (静态)
+const ORANGE = "#E98A3C";
+const RIASEC_COLOR: Record<string, string> = { R: "#4CA95E", I: "#02D1D4", A: "#2580CA", S: "#BB1228", E: "#AF8E40", C: "#9D6CDB" };
+const RIASEC_GRAD: Record<string, [string, string]> = { R: ["#4CA95E", "#B7E9CF"], I: ["#02D1D4", "#A3EAF8"], A: ["#2580CA", "#ADD6FC"], S: ["#BB1228", "#DBBDD0"], E: ["#AF8E40", "#DADBCC"], C: ["#9D6CDB", "#CFC8FB"] };
+const ROSE_PALETTE = ["#57DCC1", "#E04372", "#F6B901", "#7A4BFE", "#2E9AEB", "#7DD900", "#455DEF", "#CB40E4", "#FFEB3B"];
+const ANXIETY_GRAD: [string, string][] = [["#FBB45A", "#FCE3BE"], ["#F29CAE", "#FBDEE4"], ["#B3A2E6", "#E4DDF6"]];
+
 const OCTUPLE_TABLE = [
   { label: "波动焦虑型", value: "一到考试就考砸，焦虑值直接拉满", a: "l", b: "h", c: "h" },
   { label: "死磕傻学型", value: "蛮干，埋头硬冲到底型", a: "l", b: "l", c: "h" },
@@ -23,14 +32,13 @@ const OCTUPLE_TABLE = [
   { label: "潜力待挖型", value: "黑马属性拉满，潜力大到爆炸", a: "l", b: "h", c: "l" },
 ];
 
-// 兴趣 6 型解读 (静态)
 const INTEREST_TYPE_TABLE = [
-  { label: "实用型", value: "Realistic", a: "喜欢在讲求实际、技术规范下动手做明确的工作，对机械、仪器、工具、动能设备有兴趣。生活以实用为主，眼前的事胜于对未来的想象。情绪稳定，不善与人有深入的接触。", b: "适合从事机械、电子、土木建筑、生物科技等工作。", c: "情绪安稳、内向不善表达，严谨按部就班，谦虚有恒。" },
-  { label: "研究型", value: "Investigative", a: "喜欢用理性思考分析，善于观察判断与推理，喜欢运用符号、概念、公式来面对工作以解决问题。", b: "喜欢从事物理、化学、生物、数学、医药等研发工作，有科学及数理的能力，不好领导与社交。", c: "重视方法分析、独立、批判、理性。" },
-  { label: "艺术型", value: "Artistic", a: "善于创新、设计与美学的表达，喜欢用文字、动作、声音、色彩、音乐、舞蹈或戏剧来表达美的事物，语言能力高于数理。", b: "喜欢成为设计师、作家、画家、媒体人、音乐家、歌手与表演工作者。", c: "感性、有理想、不从众、有创意、善于表达、冲动。" },
-  { label: "社会型", value: "Social", a: "善于与人相处，关怀与帮助他人的身心需求，希望了解、分析、鼓励、教导别人成为正向乐群的人。", b: "喜欢从事助人的工作，如教师、咨询师、社工师、医护人员、活动辅导员。", c: "温暖、亲切、仁慈、合作、同理、宽容、有责任、助人。" },
-  { label: "企业型", value: "Enterprising", a: "喜欢运用规则能力、领导力和口语表达，组织安排及统筹管理人员，具有好的沟通能力，但较不在乎细部研发。", b: "喜欢销售、督导、策画、倡导等活动，有兴趣从事营销、采购、产销链、律师法官及公务行政等工作。", c: "精力充沛、动作快、冒险、外向、有企图心、社交、热情、决策快速。" },
-  { label: "事务型", value: "Conventional", a: "注意细节及事务技能，擅长纪录、建文件、编辑文件或核算精细的数字。", b: "善于执行各项事务，整洁有序、服从规范；喜欢会计、行政、数据处理方面工作，如银行人员、金融分析师、税务专家、运输物流或会计出纳等。", c: "守本分、顺从、坚毅、节俭、有条理、谨慎、实际。" },
+  { label: "实用型", value: "Realistic", a: "喜欢在讲求实际、技术规范下动手做明确的工作，对机械、仪器、工具、动能设备有兴趣。生活喜以实用为主，眼前的事胜于对未来的想象。情绪稳定，不善与人有深入的接触。", b: "适合从事机械、电子、土木建筑、生物科技等工作。", c: "情绪安稳、内向不善表达，严谨按部就班，谦虚有恒。" },
+  { label: "研究型", value: "Investigative", a: "此类型的人喜欢用理性思考分析，善于观察判断与推理，喜欢运用符号、概念、公式来面对工作以解决问题。", b: "喜欢从事物理、化学、生物、数学、医药等研发工作，有科学及数理的能力，不好领导与社交。", c: "重视方法分析、独立、批判、理性。" },
+  { label: "艺术型", value: "Artistic", a: "此型的人善于创新、设计与美学的表达，喜欢用文字、动作、声音、色彩、音乐、舞蹈或戏剧来表达美的事物，语言方面的能力高于数理。", b: "喜欢成为设计师、作家、画家、媒体人、音乐家、歌手与表演工作者。", c: "感性、有理想、不从众、有创意、善于表达、冲动。" },
+  { label: "社会型", value: "Social", a: "此类型的人善于与人相处，关怀与帮助他人的身心需求，希望了解、分析、鼓励、教导别人成为正向乐群的人。", b: "喜欢从事助人的工作，如教师、咨询师、社工师、医护人员、活动辅导员。", c: "温暖、亲切、仁慈、合作、同理、宽容、有责任、助人。" },
+  { label: "企业型", value: "Enterprising", a: "此类型的人喜欢运用规则能力，领导力和口语表达，组织安排及统筹管理人员，具有好的沟通能力，但较不在乎细部研发。", b: "喜欢销售、督导、策画、倡导等活动，有兴趣从事营销、采购、产销链、律师法官及公务行政等工作。", c: "精力充沛、动作快、冒险、外向、有企图心、社交、热情、决策快速。" },
+  { label: "事务型", value: "Conventional", a: "此型的人注意细节及事务技能，擅长纪录、建文件、编辑文件或核算精细的数字。", b: "善于执行各项事务，整洁有序、服从规范；喜欢会计、行政、数据处理方面工作，如银行人员、金融分析师、税务专家、运输物流或会计出纳等。", c: "守本分、顺从、坚毅、节俭、有条理、谨慎、实际。" },
 ];
 
 const INTEREST_FIXED = [
@@ -48,30 +56,35 @@ function rankData(scoresCake: any[]) {
     .sort((a, b) => scoresCake.findIndex(x => x.name === a.name) - scoresCake.findIndex(x => x.name === b.name));
 }
 
+const SecTitle = ({ n, title }: { n: string; title: string }) => (
+  <h2 className="mb-2 mt-1 text-lg font-bold text-primary">
+    <span className="rounded bg-primary/15 px-2 py-1 box-decoration-clone">{n}、{title}</span>
+  </h2>
+);
+const H3 = ({ children }: { children: React.ReactNode }) => <h3 className="font-bold text-slate-800">{children}</h3>;
+const Em = ({ children }: { children: React.ReactNode }) => <span className="font-semibold text-primary">{children}</span>;
+const P = ({ children }: { children: React.ReactNode }) => <p className="leading-relaxed text-slate-600">{children}</p>;
+
 export function ReportView({ report, sessionId }: { report: any; sessionId: string }) {
   const [downloading, setDownloading] = useState(false);
 
-  // ---------- 数据转换 (复刻旧前端 getReportPdfInit) ----------
-  const pieData = useMemo(() => Object.entries(report.value2 || {}).map(([name, value]) => ({ name, value })), [report]);
   const value4 = report.value4 || {};
-  const data2 = useMemo(() => [
-    { title: value4.status_anxiety?.title || "状态焦虑", value: value4.status_anxiety?.proposal || [] },
-    { title: value4.trait_anxiety?.title || "特质焦虑", value: value4.trait_anxiety?.proposal || [] },
-    { title: value4.study_anxiety?.title || "感知压力", value: value4.study_anxiety?.proposal || [] },
-  ], [report]);
   const value5: any[] = report.value5 || [];
   const value6: any[] = report.value6 || [];
   const value7: any[] = report.value7 || [];
   const value8 = report.value8 || {};
   const value9: any[] = report.value9 || [];
-
+  const pieData = useMemo(() => Object.entries(report.value2 || {}).map(([name, value]) => ({ name, value })), [report]);
   const data1 = (value8.top3_arr || []).map((it: any) => ({ name: it.title, value: it.value, color: RIASEC_COLOR[it.value] }));
   const scoresCake: any[] = value8.scores_cake || [];
   const barY = useMemo(() => rankData(scoresCake), [report]);
   const radarData = scoresCake.map(s => s.value);
-  const radarColor = RIASEC_COLOR[scoresCake.slice().sort((a, b) => b.value - a.value)[0]?.name] || "#4CA95E";
-
-  // value10 拆分: 含学生/家长建议的进 data4, 其余进 data3
+  const radarColor = "#02D1D4";
+  const data2 = [
+    { title: value4.status_anxiety?.title, value: value4.status_anxiety?.proposal || [] },
+    { title: value4.trait_anxiety?.title, value: value4.trait_anxiety?.proposal || [] },
+    { title: value4.study_anxiety?.title, value: value4.study_anxiety?.proposal || [] },
+  ];
   const { data3, data4 } = useMemo(() => {
     const d3: any[] = []; const sug: any[] = [];
     (report.value10 || []).forEach((item: any) => {
@@ -86,60 +99,212 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
     return { data3: d3, data4: { student, parents } };
   }, [report]);
 
-  // ---------- echarts options ----------
+  // ——— echarts ———
   const grad = (from: string, to: string) => ({ type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: from }, { offset: 1, color: to }] });
   const pieOption = {
-    legend: { type: "scroll", orient: "vertical", right: 6, top: "center", textStyle: { fontSize: 11 } },
+    legend: { orient: "vertical", right: 0, top: "center", itemWidth: 12, itemHeight: 12, textStyle: { fontSize: 11 } },
     tooltip: { trigger: "item" },
-    series: [{ type: "pie", radius: [35, 105], center: ["38%", "50%"], roseType: "area", itemStyle: { borderRadius: 2 }, data: pieData, color: ROSE_PALETTE }],
+    series: [{ type: "pie", radius: [34, 96], center: ["34%", "50%"], roseType: "area", itemStyle: { borderRadius: 2 }, data: pieData, color: ROSE_PALETTE, label: { fontSize: 10, color: "#666" }, labelLine: { length: 8, length2: 8 } }],
   };
   const barOption = {
-    grid: { top: 30, left: 40, right: 16, bottom: 24 },
-    xAxis: { type: "category", data: value5.map(v => v.title), axisLabel: { color: "#999" }, axisLine: { lineStyle: { color: "#ECECEC" } } },
+    grid: { top: 30, left: 36, right: 16, bottom: 24 },
+    xAxis: { type: "category", data: value5.map(v => v.title), axisLabel: { color: "#999" }, axisLine: { lineStyle: { color: "#ECECEC" } }, axisTick: { show: false } },
     yAxis: { type: "value", axisLabel: { color: "#999" }, splitLine: { lineStyle: { color: "#ECECEC" } } },
     tooltip: { trigger: "axis" },
-    series: [{ type: "bar", data: value5.map(v => v.value), barWidth: "42%", itemStyle: { borderRadius: [4, 4, 0, 0], color: grad("#3aa0ff", "#bfe0ff") }, label: { show: true, position: "top", color: "#3180C3", fontWeight: 600 } }],
+    series: [{ type: "bar", barWidth: "40%", data: value5.map((v, i) => ({ value: v.value, itemStyle: { borderRadius: [4, 4, 0, 0], color: grad(ANXIETY_GRAD[i % 3][0], ANXIETY_GRAD[i % 3][1]) } })), label: { show: true, position: "top", color: "#2580CA", fontWeight: 600 } }],
   };
   const barXOption = {
-    grid: { top: 10, left: 90, right: 40, bottom: 10 },
+    grid: { top: 8, left: 96, right: 40, bottom: 8 },
     xAxis: { type: "value", max: 100, splitLine: { show: false }, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false } },
     yAxis: { type: "category", data: value7.map(v => v.name), axisLine: { show: false }, axisTick: { show: false }, axisLabel: { color: "#666", fontSize: 12 } },
-    series: [{ type: "bar", data: value7.map(v => v.value), barWidth: 13, itemStyle: { color: "#3180C3" }, label: { show: true, position: "right", color: "#3180C3", fontWeight: 600 } }],
+    series: [{ type: "bar", data: value7.map(v => v.value), barWidth: 12, itemStyle: { color: "#2580CA", borderRadius: 2 }, label: { show: true, position: "right", color: "#2580CA", fontWeight: 600 } }],
   };
   const radarOption = {
     tooltip: {},
-    radar: { indicator: [{ name: "实际", max: 100 }, { name: "研究", max: 100 }, { name: "艺术", max: 100 }, { name: "社会", max: 100 }, { name: "企业", max: 100 }, { name: "事务", max: 100 }], radius: 78, center: ["50%", "55%"], axisName: { color: "#666" } },
+    radar: { indicator: [{ name: "实际", max: 100 }, { name: "研究", max: 100 }, { name: "艺术", max: 100 }, { name: "社会", max: 100 }, { name: "企业", max: 100 }, { name: "事务", max: 100 }], radius: 66, center: ["50%", "54%"], axisName: { color: "#888", fontSize: 11 }, splitNumber: 4 },
     series: [{ type: "radar", data: [{ value: radarData, areaStyle: { color: radarColor + "55" }, lineStyle: { color: radarColor }, itemStyle: { color: radarColor }, label: { show: true, color: "#666", fontSize: 10 } }] }],
   };
   const barYOption = {
-    grid: { top: 30, left: 40, right: 10, bottom: 40, containLabel: true },
-    xAxis: { type: "category", data: barY.map(it => it.title), axisLabel: { color: "#666", fontSize: 11, interval: 0 } },
+    grid: { top: 26, left: 32, right: 8, bottom: 6, containLabel: true },
+    xAxis: { type: "category", data: barY.map(it => it.title), axisLabel: { show: false }, axisTick: { show: false }, axisLine: { lineStyle: { color: "#ECECEC" } } },
     yAxis: { type: "value", min: 0, max: 100, axisLabel: { color: "#999" }, splitLine: { lineStyle: { color: "#ECECEC" } } },
     tooltip: { trigger: "axis" },
-    series: [{
-      type: "bar", barWidth: "46%",
-      data: barY.map(it => ({ value: it.value, itemStyle: { borderRadius: [4, 4, 0, 0], color: grad(RIASEC_COLOR[it.name], (RIASEC_COLOR[it.name] || "#ccc") + "55") } })),
-      label: { show: true, position: "top", color: "#3180C3", fontSize: 11, fontWeight: 600 },
-    }],
+    series: [{ type: "bar", barWidth: "50%", data: barY.map(it => ({ value: it.value, itemStyle: { borderRadius: [4, 4, 0, 0], color: grad(RIASEC_GRAD[it.name][0], RIASEC_GRAD[it.name][1]) } })), label: { show: true, position: "top", color: "#2580CA", fontSize: 11, fontWeight: 600 } }],
   };
+
+  // ——— 内容块 ———
+  const blocks: React.ReactNode[] = [];
+  const push = (n: React.ReactNode) => blocks.push(n);
+
+  push(<h1 className="text-center text-2xl font-bold text-slate-800">《个性化学习与发展评估报告》</h1>);
+  push(<SecTitle n="一" title="通用导读" />);
+  push(<H3>通用导读</H3>);
+  push(<P>本报告基于多模态测评记录、多元性向潜能发展测评、兴趣测评及主观自陈量表四份测评，从抗压能力、自信心等 9 个维度，全面评估学生学习状态与发展潜力。报告将明确其学习类型，解读测评结果，并提供针对性发展建议，助力优化学习策略、改善学习心态。</P>);
+  push(<H3>学习发展综合数字画像</H3>);
+  push(
+    <div className="flex items-start gap-4 rounded-lg bg-slate-50 p-4">
+      <div className="flex-1">
+        <div className="font-bold text-primary">{report.value1?.title || ""}</div>
+        <p className="mt-1 leading-relaxed text-slate-600">{report.value1?.content || ""}</p>
+      </div>
+      {report.value1?.img ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={`/report/i${report.value1.img}.png`} alt={report.value1?.name || ""} className="h-40 w-32 shrink-0 rounded border object-cover" />
+      ) : null}
+    </div>
+  );
+  push(<H3>各维度数据展示</H3>);
+  push(<EChart option={pieOption} className="h-[260px] w-full" />);
+
+  push(<SecTitle n="二" title="综合结论与类型界定" />);
+  push(
+    <div className="flex items-center gap-3 py-1">
+      <span className="text-slate-600">经过测评您在八维学格类型中属于：</span>
+      <span className="rounded px-2 text-2xl font-extrabold" style={{ color: ORANGE, background: ORANGE + "1f" }}>{report.value3?.title || ""}</span>
+    </div>
+  );
+  push(
+    <table className="w-full border-collapse text-xs">
+      <thead>
+        <tr className="bg-slate-100 text-slate-700">
+          <th className="p-2 text-left">八维学格</th>
+          <th className="p-2 text-left" colSpan={3}>组合规则 <span className="font-normal text-muted-foreground">（l-表示低 &nbsp; h-表示高）</span></th>
+        </tr>
+        <tr className="text-[11px] text-muted-foreground">
+          <td className="p-1"></td>
+          <td className="p-1 text-center">多模态<br />Eh/El</td>
+          <td className="p-1 text-center">多元性向R<br />Rh/Rl</td>
+          <td className="p-1 text-center">自陈量表S<br />Sh/Sl</td>
+        </tr>
+      </thead>
+      <tbody>
+        {OCTUPLE_TABLE.map(row => {
+          const cur = row.label === report.value3?.title;
+          return (
+            <tr key={row.label} className={"border-t " + (cur ? "bg-primary/10" : "")}>
+              <td className="p-2"><div className={"font-medium " + (cur ? "text-primary" : "text-slate-700")}>{row.label}</div><div className="text-[11px] text-muted-foreground">{row.value}</div></td>
+              <td className="p-2 text-center">{row.a}</td><td className="p-2 text-center">{row.b}</td><td className="p-2 text-center">{row.c}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+  push(<div><span className="font-bold text-slate-800">主要类型：{report.value3?.title || ""}</span></div>);
+  push(<P>{report.value3?.content || ""}</P>);
+
+  push(<SecTitle n="三" title="测评维度深度解读" />);
+  push(<H3>（一）多模态测评记录</H3>);
+  push(<P><Em>测评核心：</Em>聚焦日常及压力场景下的情绪表现，重点观察面对考试、学习挫折时的心态变化。</P>);
+  push(<p className="font-semibold text-primary">结果解读：</p>);
+  ["status_anxiety", "trait_anxiety", "study_anxiety"].forEach(k => value4[k] && push(<p key={k} className="leading-relaxed text-slate-600"><b className="text-slate-800">{value4[k].title}：</b>{value4[k].result}</p>));
+  push(<EChart option={barOption} className="h-[260px] w-full" />);
+
+  push(<H3>（二）多元性向潜能发展测评</H3>);
+  push(<P><Em>测评核心：</Em>从语文辞意、数学概念、抽象逻辑、立体空间、中文字词、中文语法等多个角度，观察学习相关的核心能力表现，判断不同学科学习中的优势与待提升点。</P>);
+  push(<p className="font-semibold text-primary">结果解读：</p>);
+  value6.forEach((it, i) => push(<p key={i} className="leading-relaxed text-slate-600"><b className="text-slate-800">{it.title}：</b>{it.content}</p>));
+  push(<EChart option={barXOption} className="h-[270px] w-full" />);
+
+  push(<H3>（三）兴趣测评</H3>);
+  push(<P><Em>测评核心：</Em>通过观察对不同活动、职业、课程的偏好，明确兴趣倾向，为学习动力激发、未来选科和职业规划提供参考。</P>);
+  push(<p className="font-semibold text-primary">结果解读：</p>);
+  INTEREST_FIXED.forEach((it, i) => push(<p key={i} className="leading-relaxed text-slate-600"><b className="text-slate-800">{it.t}</b>{it.v}</p>));
+  push(
+    <div className="rounded-lg bg-slate-50 p-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <H3>兴趣组型</H3>
+          <p className="text-[11px] text-muted-foreground">兴趣量表测验所得的兴趣组型</p>
+          <div className="my-1 flex justify-around">{data1.map((it: any, i: number) => (<div key={i} className="text-center"><div className="text-3xl font-bold" style={{ color: it.color }}>{it.value}</div><div className="text-xs text-slate-600">{it.name}</div></div>))}</div>
+          <EChart option={radarOption} className="h-[200px] w-full" />
+        </div>
+        <div>
+          <H3>兴趣类型分数图</H3>
+          <p className="text-[11px] text-muted-foreground">各类兴趣类型得分直方图</p>
+          <EChart option={barYOption} className="h-[180px] w-full" />
+          <div className="pl-8 pr-2 text-[11px]">
+            <div className="grid grid-cols-6 text-center"><span className="text-muted-foreground">得分排名</span>{scoresCake.slice(1).map((s: any) => { const r = barY.find(b => b.name === s.name); return <span key={s.name} className="font-bold" style={{ color: RIASEC_COLOR[s.name] }}>({r?.rank})</span>; })}</div>
+            <div className="grid grid-cols-6 text-center"><span className="text-muted-foreground">兴趣类型</span>{scoresCake.slice(1).map((s: any) => <span key={s.name} className="text-slate-600">{s.title}{s.name}</span>)}</div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-bold">区分性指标：<span style={{ color: "#BB1228" }}>{value8.diff_level || ""}</span></div>
+          <p className="text-[11px] text-muted-foreground">各类型得分差异程度，等级越高越容易区分喜欢与不喜欢的兴趣类型。</p>
+          <div className="mt-2 flex items-center justify-center gap-3 text-lg font-bold text-primary"><span>{value8.top3 || ""}</span><span className="text-muted-foreground text-sm">VS</span><span>{value8.self_introduce || ""}</span></div>
+          <div className="flex justify-center gap-10 text-[11px] text-muted-foreground"><span>（兴趣组型）</span><span>（自我介绍组型）</span></div>
+        </div>
+        <div>
+          <div className="font-bold">谐和度指标：<span style={{ color: "#BB1228" }}>{value8.norm_level || ""}</span></div>
+          <p className="text-[11px] text-muted-foreground">兴趣组型与自我介绍组型的相近程度，等级越高越相近（高/中上/普通/低）。</p>
+        </div>
+      </div>
+      <p className="mt-3 border-t pt-2 text-[11px] leading-relaxed text-muted-foreground">此页为测验结果的综合报告，即测验结果与重要指标的汇整。核心包括：兴趣组型、兴趣六角图、兴趣类型分数图、区分性和谐和度指标。在接下来的报告中将逐一详细说明与解释，可作为阅读时的参考工具。</p>
+    </div>
+  );
+  push(<H3>兴趣六型解读</H3>);
+  INTEREST_TYPE_TABLE.forEach(row => push(
+    <div key={row.label} className="flex gap-3 rounded-lg border p-3 text-xs">
+      <div className="w-20 shrink-0"><div className="font-bold text-slate-800">{row.label}</div><div className="text-[10px] text-muted-foreground">{row.value}</div></div>
+      <div className="flex-1 space-y-1 text-slate-600"><p><b className="text-primary">兴趣类型：</b>{row.a}</p><p><b className="text-primary">职业活动：</b>{row.b}</p><p><b className="text-primary">性格特征：</b>{row.c}</p></div>
+    </div>
+  ));
+
+  push(<H3>（四）主观自陈量表</H3>);
+  push(<P><Em>测评核心：</Em>结合日常学习中的真实想法和行为，从自我认知、习惯养成、目标管理、支持感知等角度，分析学习过程中的内在状态。</P>);
+  push(<p className="font-semibold text-primary">结果解读：</p>);
+  value9.forEach((it, i) => push(<p key={i} className="leading-relaxed text-slate-600"><b className="text-slate-800">{it.name}：</b>{it.value}</p>));
+
+  push(<SecTitle n="四" title="发展建议及能力提升方向" />);
+  push(<P>结合学生当前学习状态与测评结果，建议从<b className="text-primary">{report.value3?.str || ""}</b>方向入手，针对性提升能力，充分发挥其学习潜力。</P>);
+  push(<H3>（一）针对学生的抗压能力和情绪状态的建议</H3>);
+  data2.forEach((item, i) => push(
+    <div key={i}><div className="font-bold text-primary">{i + 1}、{item.title}</div>{(item.value || []).map((c: any, j: number) => <p key={j} className="leading-relaxed text-slate-600"><b className="text-primary">{c.title}</b>{c.value}</p>)}</div>
+  ));
+  push(<H3>（二）针对学习策略、学习动力等方面的提升建议</H3>);
+  data3.forEach((item: any, i: number) => push(
+    <div key={i}><div className="font-bold text-primary">{i + 1}、{item.title}</div>{(item.value || []).map((c: any, j: number) => <p key={j} className="leading-relaxed text-slate-600"><b className="text-slate-800">{c.title}</b>{c.value}</p>)}</div>
+  ));
+  if (data4.student.length || data4.parents.length) {
+    push(<div className="font-bold text-primary">{data3.length + 1}、关于学生能感知到的支持的建议</div>);
+    if (data4.student.length) { push(<div className="font-bold text-slate-800">@学生的建议：</div>); data4.student.forEach((c: any, i: number) => push(<p key={i} className="leading-relaxed text-slate-600"><b className="text-slate-800">{c.title}</b>{c.value}</p>)); }
+    if (data4.parents.length) { push(<div className="font-bold text-slate-800">@家长建议：</div>); data4.parents.forEach((c: any, i: number) => push(<p key={i} className="leading-relaxed text-slate-600"><b className="text-slate-800">{c.title}</b>{c.value}</p>)); }
+  }
+
+  // ——— 分页测量 ———
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [pages, setPages] = useState<number[][]>([]);
+  useLayoutEffect(() => {
+    const el = measureRef.current;
+    if (!el) return;
+    const kids = Array.from(el.children) as HTMLElement[];
+    const groups: number[][] = []; let cur: number[] = []; let h = 0;
+    kids.forEach((k, i) => {
+      const bh = k.offsetHeight + 10;
+      if (h + bh > CONTENT_H && cur.length) { groups.push(cur); cur = []; h = 0; }
+      cur.push(i); h += bh;
+    });
+    if (cur.length) groups.push(cur);
+    setPages(groups);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report]);
 
   async function downloadPdf() {
     setDownloading(true);
     try {
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
-      const el = document.getElementById("report-root");
-      if (!el) throw new Error("未找到报告内容");
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#fff" });
+      const pageEls = Array.from(document.querySelectorAll("#report-root .a4-page")) as HTMLElement[];
+      if (!pageEls.length) throw new Error("报告未就绪");
       const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const imgH = (canvas.height * pageW) / canvas.width;
-      const img = canvas.toDataURL("image/jpeg", 0.92);
-      let heightLeft = imgH; let pos = 0;
-      pdf.addImage(img, "JPEG", 0, pos, pageW, imgH);
-      heightLeft -= pageH;
-      while (heightLeft > 0) { pos = heightLeft - imgH; pdf.addPage(); pdf.addImage(img, "JPEG", 0, pos, pageW, imgH); heightLeft -= pageH; }
-      pdf.save(`学习与发展评估报告_${report.name || ""}.pdf`);
+      for (let i = 0; i < pageEls.length; i++) {
+        const canvas = await html2canvas(pageEls[i], { scale: 2, useCORS: true, backgroundColor: "#fff" });
+        const img = canvas.toDataURL("image/jpeg", 0.92);
+        if (i > 0) pdf.addPage();
+        pdf.addImage(img, "JPEG", 0, 0, 210, 297);
+      }
+      pdf.save(`个性化学习与发展评估报告_${report.name || ""}.pdf`);
     } catch (e: any) {
       toast.error(e?.message || "导出失败");
     } finally {
@@ -147,198 +312,75 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
     }
   }
 
+  const totalPages = pages.length + 1;
+  const Header = () => (
+    <div style={{ height: HEADER_H }}>
+      <div className="flex items-end justify-between">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/report/logo.png" alt="发展猫" className="h-7 object-contain" onError={(e: any) => { e.target.style.display = "none"; }} />
+        <div className="text-right leading-tight">
+          <div className="text-sm font-bold text-primary">个人报告</div>
+          <div className="text-[11px] text-muted-foreground">评测日期：{report.dates || "—"} &nbsp; 编号：{report.code || "—"}</div>
+        </div>
+      </div>
+      <div className="mt-1 border-t border-slate-200" />
+      <div className="h-[2px] bg-primary" />
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      {/* 工具栏 (不进 PDF) */}
       <div className="flex items-center justify-between">
         <Link href="/assessments/reports"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /> 返回列表</Button></Link>
         <div className="flex gap-2">
           <Link href={`/assessments/reports/${sessionId}`}><Button variant="outline" size="sm">复核作答</Button></Link>
-          <Button size="sm" onClick={downloadPdf} disabled={downloading}>
+          <Button size="sm" onClick={downloadPdf} disabled={downloading || !pages.length}>
             {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} 下载 PDF
           </Button>
         </div>
       </div>
 
-      {/* 报告主体 */}
-      <div id="report-root" className="mx-auto max-w-[820px] rounded-xl border bg-white p-8 text-[13px] leading-relaxed text-slate-700 shadow-sm space-y-5">
-        {/* 标题 */}
-        <div className="text-center border-b pb-4">
-          <h1 className="text-2xl font-bold text-slate-800">个性化学习与发展评估报告</h1>
-          <p className="mt-1 text-sm text-muted-foreground">个人报告</p>
-          <div className="mt-3 flex justify-center gap-6 text-sm">
-            <span>姓名：<b>{report.name || "—"}</b></span>
-            <span>编号：<b>{report.code || "—"}</b></span>
-            <span>日期：<b>{report.dates || "—"}</b></span>
-          </div>
-        </div>
+      {/* 离屏测量 */}
+      <div ref={measureRef} aria-hidden style={{ position: "absolute", left: -99999, top: 0, width: CONTENT_W }} className="text-[13px] text-slate-700">
+        {blocks.map((b, i) => <div key={i} style={{ marginBottom: 10 }}>{b}</div>)}
+      </div>
 
-        {/* 一、通用导读 */}
-        <Section n="一" title="通用导读" />
-        <p>本报告基于多模态测评记录、多元性向潜能发展测评、兴趣测评及主观自陈量表四份测评，从抗压能力、自信心等 9 个维度，全面评估学生学习状态与发展潜力。报告将明确其学习类型，解读测评结果，并提供针对性发展建议，助力优化学习策略、改善学习心态。</p>
-
-        <H3>学习发展综合数字画像</H3>
-        <div className="flex items-start gap-4 rounded-lg bg-slate-50 p-4">
-          <div className="flex-1">
-            <div className="font-semibold text-slate-800">{report.value1?.title || ""}</div>
-            <p className="mt-1">{report.value1?.content || ""}</p>
-          </div>
-          <div className="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-full bg-primary/10 text-primary">
-            <span className="text-xs">代表人物</span>
-            <span className="text-sm font-bold">{report.value1?.name || "—"}</span>
-          </div>
-        </div>
-
-        <H3>各维度数据展示</H3>
-        <EChart option={pieOption} className="h-[260px] w-full" />
-
-        {/* 二、综合结论与类型界定 */}
-        <Section n="二" title="综合结论与类型界定" />
-        <div className="rounded-lg bg-primary/5 px-4 py-3">
-          经过测评，您在八维学格类型中属于：<b className="text-primary text-base">{report.value3?.title || ""}</b>
-        </div>
-        <table className="w-full border-collapse text-center text-xs">
-          <thead>
-            <tr className="bg-slate-100">
-              <th className="border p-2 text-left">八维学格</th>
-              <th className="border p-2">多模态 E</th>
-              <th className="border p-2">多元性向 R</th>
-              <th className="border p-2">自陈量表 S</th>
-            </tr>
-          </thead>
-          <tbody>
-            {OCTUPLE_TABLE.map(row => {
-              const cur = row.label === report.value3?.title;
-              return (
-                <tr key={row.label} className={cur ? "bg-primary/10 font-medium" : ""}>
-                  <td className="border p-2 text-left"><div>{row.label}</div><div className="text-[11px] text-muted-foreground">{row.value}</div></td>
-                  <td className="border p-2">{row.a}</td><td className="border p-2">{row.b}</td><td className="border p-2">{row.c}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <p className="text-[11px] text-muted-foreground">l-表示低 &nbsp; h-表示高</p>
-        <H3>主要类型：{report.value3?.title || ""}</H3>
-        <p>{report.value3?.content || ""}</p>
-
-        {/* 三、测评维度深度解读 */}
-        <Section n="三" title="测评维度深度解读" />
-        <H3>（一）多模态测评记录</H3>
-        <p><Em>测评核心：</Em>聚焦日常及压力场景下的情绪表现，重点观察面对考试、学习挫折时的心态变化。</p>
-        <p><Em>结果解读：</Em></p>
-        {["status_anxiety", "trait_anxiety", "study_anxiety"].map(k => value4[k] && (
-          <p key={k}><b>{value4[k].title}：</b>{value4[k].result}</p>
-        ))}
-        <EChart option={barOption} className="h-[280px] w-full" />
-
-        <H3>（二）多元性向潜能发展测评</H3>
-        <p><Em>测评核心：</Em>从语文辞意、数学概念、抽象逻辑、立体空间、中文字词、中文语法等多个角度，观察学习相关的核心能力表现，判断不同学科学习中的优势与待提升点。</p>
-        <p><Em>结果解读：</Em></p>
-        {value6.map((it, i) => <p key={i}><b>{it.title}：</b>{it.content}</p>)}
-        <EChart option={barXOption} className="h-[300px] w-full" />
-
-        <H3>（三）兴趣测评</H3>
-        <p><Em>测评核心：</Em>通过观察对不同活动、职业、课程的偏好，明确兴趣倾向，为学习动力激发、未来选科和职业规划提供参考。</p>
-        <p><Em>结果解读：</Em></p>
-        {INTEREST_FIXED.map((it, i) => <p key={i}><b>{it.t}</b>{it.v}</p>)}
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <H3>兴趣组型</H3>
-            <p className="text-[11px] text-muted-foreground">兴趣量表测验所得的兴趣组型</p>
-            <div className="my-2 flex justify-around">
-              {data1.map((it: any, i: number) => (
-                <div key={i} className="text-center"><div className="text-2xl font-bold" style={{ color: it.color }}>{it.value}</div><div className="text-xs">{it.name}</div></div>
+      {/* A4 分页 */}
+      <div id="report-root" className="mx-auto flex w-fit flex-col items-center gap-5">
+        {/* 封面 */}
+        <div className="a4-page relative overflow-hidden bg-white shadow" style={{ width: PAGE_W, height: PAGE_H }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/report/top.png" alt="" className="pointer-events-none absolute right-0 top-0 w-2/3" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/report/bottom.png" alt="" className="pointer-events-none absolute bottom-0 left-0 w-2/3" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/report/logo.png" alt="发展猫" className="absolute left-12 top-10 h-9 object-contain" onError={(e: any) => { e.target.style.display = "none"; }} />
+          <div className="relative flex h-full flex-col items-center px-16 pt-[36%] text-center">
+            <h1 className="text-[34px] font-bold leading-snug text-slate-800">《个性化学习与<br />发展评估报告》</h1>
+            <div className="my-5 h-1 w-16 rounded bg-primary" />
+            <div className="text-xl font-bold text-slate-700">个人报告</div>
+            <div className="mt-20 space-y-4 text-[15px]">
+              {[["测评姓名", report.name], ["测评编号", report.code], ["测评日期", report.dates]].map(([l, v]) => (
+                <div key={l} className="flex items-center justify-center gap-2"><span className="text-slate-600">{l}：</span><span className="font-medium tracking-widest">[&nbsp;&nbsp;{v || "—"}&nbsp;&nbsp;]</span></div>
               ))}
             </div>
-            <EChart option={radarOption} className="h-[220px] w-full" />
-          </div>
-          <div>
-            <H3>兴趣类型分数图</H3>
-            <p className="text-[11px] text-muted-foreground">各类兴趣类型得分直方图</p>
-            <EChart option={barYOption} className="h-[240px] w-full" />
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 rounded-lg bg-slate-50 p-4">
-          <div>
-            <div className="font-semibold">区分性指标：<span className="text-primary">{value8.diff_level || ""}</span></div>
-            <p className="text-[11px] text-muted-foreground">各类型得分差异程度，等级越高越容易区分喜欢与不喜欢的兴趣类型。</p>
-            <div className="mt-2 flex items-center justify-center gap-3 text-lg font-bold">
-              <span>{value8.top3 || ""}</span><span className="text-muted-foreground text-sm">VS</span><span>{value8.self_introduce || ""}</span>
+        {/* 内容页 */}
+        {pages.map((grp, pi) => (
+          <div key={pi} className="a4-page relative flex flex-col bg-white shadow" style={{ width: PAGE_W, height: PAGE_H, padding: PAD }}>
+            <Header />
+            <div className="flex-1 overflow-hidden pt-3 text-[13px] text-slate-700">
+              {grp.map(i => <div key={i} style={{ marginBottom: 10 }}>{blocks[i]}</div>)}
             </div>
-            <div className="flex justify-center gap-8 text-[11px] text-muted-foreground"><span>（兴趣组型）</span><span>（自我介绍组型）</span></div>
-          </div>
-          <div>
-            <div className="font-semibold">谐和度指标：<span className="text-primary">{value8.norm_level || ""}</span></div>
-            <p className="text-[11px] text-muted-foreground">兴趣组型与自我介绍组型的相近程度，等级越高越相近（高/中上/普通/低）。</p>
-          </div>
-        </div>
-
-        <table className="w-full border-collapse text-xs">
-          <thead><tr className="bg-slate-100"><th className="border p-2 w-24">类型</th><th className="border p-2 text-left">解读</th></tr></thead>
-          <tbody>
-            {INTEREST_TYPE_TABLE.map(row => (
-              <tr key={row.label}>
-                <td className="border p-2 text-center"><div className="font-medium">{row.label}</div><div className="text-[10px] text-muted-foreground">{row.value}</div></td>
-                <td className="border p-2 space-y-1">
-                  <p><b>兴趣类型：</b>{row.a}</p><p><b>职业活动：</b>{row.b}</p><p><b>性格特征：</b>{row.c}</p>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <H3>（四）主观自陈量表</H3>
-        <p><Em>测评核心：</Em>结合日常学习中的真实想法和行为，从自我认知、习惯养成、目标管理、支持感知等角度，分析学习过程中的内在状态。</p>
-        <p><Em>结果解读：</Em></p>
-        {value9.map((it, i) => <p key={i}><b>{it.name}：</b>{it.value}</p>)}
-
-        {/* 四、发展建议 */}
-        <Section n="四" title="发展建议及能力提升方向" />
-        <p>结合学生当前学习状态与测评结果，建议从<b className="text-primary">{report.value3?.str || ""}</b>方向入手，针对性提升能力，充分发挥其学习潜力。</p>
-
-        <H3>（一）针对学生的抗压能力和情绪状态的建议</H3>
-        {data2.map((item, i) => (
-          <div key={i} className="space-y-1">
-            <div className="font-medium text-primary">{i + 1}、{item.title}</div>
-            {(item.value || []).map((c: any, j: number) => <p key={j}><b className="text-primary">{c.title}</b>{c.value}</p>)}
+            <div className="flex items-center justify-between border-t pt-1 text-[11px] text-muted-foreground" style={{ height: FOOTER_H }}>
+              <span>树洞 · TreeHole 学习力测评</span>
+              <span>第 {pi + 2} / {totalPages} 页</span>
+            </div>
           </div>
         ))}
-
-        <H3>（二）针对学习策略、学习动力等方面的提升建议</H3>
-        {data3.map((item: any, i: number) => (
-          <div key={i} className="space-y-1">
-            <div className="font-medium text-primary">{i + 1}、{item.title}</div>
-            {(item.value || []).map((c: any, j: number) => <p key={j}><b>{c.title}</b>{c.value}</p>)}
-          </div>
-        ))}
-
-        {(data4.student.length > 0 || data4.parents.length > 0) && (
-          <>
-            <H3>{data3.length + 1}、关于学生能感知到的支持的建议</H3>
-            {data4.student.length > 0 && <>
-              <div className="font-medium">@学生的建议：</div>
-              {data4.student.map((c: any, i: number) => <p key={i}><b>{c.title}</b>{c.value}</p>)}
-            </>}
-            {data4.parents.length > 0 && <>
-              <div className="font-medium mt-2">@家长建议：</div>
-              {data4.parents.map((c: any, i: number) => <p key={i}><b>{c.title}</b>{c.value}</p>)}
-            </>}
-          </>
-        )}
       </div>
     </div>
   );
-}
-
-function Section({ n, title }: { n: string; title: string }) {
-  return <h2 className="mt-6 border-l-4 border-primary pl-3 text-lg font-bold text-slate-800">{n}、{title}</h2>;
-}
-function H3({ children }: { children: React.ReactNode }) {
-  return <h3 className="mt-3 font-semibold text-slate-800">{children}</h3>;
-}
-function Em({ children }: { children: React.ReactNode }) {
-  return <span className="font-semibold text-primary">{children}</span>;
 }

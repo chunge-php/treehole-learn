@@ -110,7 +110,7 @@ export function ReportView({ report, sessionId, mode = "admin" }: { report: any;
   // ——— echarts ———
   const grad = (from: string, to: string) => ({ type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: from }, { offset: 1, color: to }] });
   const pieOption = {
-    legend: { orient: "vertical", right: 4, top: "center", itemWidth: 14, itemHeight: 14, itemGap: 8, textStyle: { fontSize: 13, color: "#444" } },
+    legend: { orient: "vertical", right: 4, top: "center", itemWidth: 15, itemHeight: 15, itemGap: 9, textStyle: { fontSize: 14, color: "#444" } },
     tooltip: { trigger: "item" },
     series: [{ type: "pie", radius: [38, 104], center: ["36%", "50%"], roseType: "area", itemStyle: { borderRadius: 2 }, data: pieData, color: ROSE_PALETTE, label: { fontSize: 13, color: "#555" }, labelLine: { length: 10, length2: 10 } }],
   };

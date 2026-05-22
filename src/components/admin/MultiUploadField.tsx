@@ -2,6 +2,7 @@
 import { useRef, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { uploadFile } from "@/lib/upload";
+import { SafeImage } from "./SafeImage";
 import { toast } from "sonner";
 import { Upload, Loader2, X, Image as ImageIcon, Video as VideoIcon, FileIcon, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -104,8 +105,7 @@ export function MultiUploadField({
               <div key={i} className="group relative rounded-lg border bg-card overflow-hidden">
                 <div className="aspect-square bg-muted/30 flex items-center justify-center overflow-hidden">
                   {isImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={m.url} alt={m.name} className="h-full w-full object-cover" />
+                    <SafeImage src={m.url} alt={m.name} className="h-full w-full object-cover" />
                   ) : isVideo ? (
                     <video src={m.url} className="h-full w-full object-cover" />
                   ) : (

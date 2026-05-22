@@ -18,7 +18,8 @@ import {
 } from "../actions";
 import { DIMENSIONS, QTYPES, type AssessmentDimension, type AssessmentQType } from "./constants";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, CheckCircle2, AlertCircle, ImagePlus, X } from "lucide-react";
+import { Loader2, Plus, Trash2, CheckCircle2, AlertCircle, ImagePlus, X, Film } from "lucide-react";
+import { SafeImage } from "@/components/admin/SafeImage";
 import { cn } from "@/lib/utils";
 
 type SortCheck = { status: "idle" | "checking" | "available" | "taken"; reason?: string };
@@ -298,7 +299,7 @@ export function AssessmentForm({
                   const v = o.value || nextLetter(idx);
                   const isAnswer = form.answer === v;
                   const hasMedia = !!o.media_url;
-                  const showMedia = hasMedia || mediaOpen.has(idx);
+                  const editing = mediaOpen.has(idx);
                   return (
                     <div
                       key={idx}
@@ -313,69 +314,86 @@ export function AssessmentForm({
                           name="th-correct-answer"
                           checked={isAnswer}
                           onChange={() => setForm({ ...form, answer: v })}
-                          className="h-3.5 w-3.5 accent-success cursor-pointer"
+                          className="h-3.5 w-3.5 accent-success cursor-pointer shrink-0"
                           title="标记为正确答案"
                         />
                         <Badge
                           variant={isAnswer ? "success" : "outline"}
-                          className="font-mono w-8 justify-center shrink-0"
+                          className="font-mono w-7 justify-center shrink-0"
                         >{v}</Badge>
+
+                        {/* 媒体缩略图: 有图时显示, 点击展开编辑; 右上角悬停可移除 */}
+                        {hasMedia && (
+                          <div className="relative group shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => toggleMedia(idx)}
+                              className={cn(
+                                "h-9 w-9 overflow-hidden rounded border bg-muted/30 flex items-center justify-center",
+                                editing && "ring-2 ring-primary"
+                              )}
+                              title="点击编辑媒体"
+                            >
+                              {o.media_type === "video"
+                                ? <Film className="h-4 w-4 text-muted-foreground" />
+                                : <SafeImage src={o.media_url} className="h-full w-full object-cover" showTip={false} />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOption(idx, { media_url: undefined, media_type: undefined })}
+                              className="absolute -right-1.5 -top-1.5 hidden group-hover:flex rounded-full bg-destructive p-0.5 text-white shadow"
+                              title="移除媒体"
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
+                          </div>
+                        )}
+
                         <Input
                           value={o.label}
                           onChange={e => setOption(idx, { label: e.target.value })}
-                          placeholder={`选项 ${v} 文字 (可只配图)`}
+                          placeholder={hasMedia ? "图片说明 (可空)" : `选项 ${v} 文字`}
                           className="flex-1 h-8"
                         />
-                        <Button
-                          type="button"
-                          variant={showMedia ? "secondary" : "ghost"}
-                          size="icon"
-                          onClick={() => toggleMedia(idx)}
-                          className="h-8 w-8 shrink-0"
-                          title="添加图片/视频"
-                        >
-                          <ImagePlus className={cn("h-3.5 w-3.5", hasMedia && "text-primary")} />
-                        </Button>
+
+                        {!hasMedia && (
+                          <Button
+                            type="button"
+                            variant={editing ? "secondary" : "ghost"}
+                            size="icon"
+                            onClick={() => toggleMedia(idx)}
+                            className="h-8 w-8 shrink-0"
+                            title="配图片 / 视频"
+                          >
+                            <ImagePlus className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         {form.qtype === "单选题" && (form.options?.length || 0) > 2 && (
-                          <Button type="button" variant="ghost" size="icon" onClick={() => removeOption(idx)} className="h-8 w-8">
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeOption(idx)} className="h-8 w-8 shrink-0">
                             <Trash2 className="h-3.5 w-3.5 text-destructive" />
                           </Button>
                         )}
                       </div>
 
-                      {showMedia && (
-                        <div className="mt-2 ml-[3.25rem] mr-1 space-y-2">
+                      {/* 媒体编辑区: 仅展开时显示 */}
+                      {editing && (
+                        <div className="mt-1.5 ml-9 mr-1">
                           <UploadField
                             value={o.media_url || ""}
-                            onChange={url => setOption(idx, {
-                              media_url: url || undefined,
-                              media_type: url ? inferMediaType(url) : undefined
-                            })}
+                            onChange={url => {
+                              setOption(idx, {
+                                media_url: url || undefined,
+                                media_type: url ? inferMediaType(url) : undefined
+                              });
+                              // 选好媒体后自动收起, 回到紧凑缩略图
+                              if (url) setMediaOpen(prev => { const n = new Set(prev); n.delete(idx); return n; });
+                            }}
                             accept="image/*,video/*"
                             pickerKinds={["image", "video"]}
                             prefix="opt"
                             preview={false}
-                            placeholder="选项图片/视频: 粘贴 URL / 上传 / 素材库"
+                            placeholder="粘贴 URL / 上传 / 素材库选择"
                           />
-                          {hasMedia && (
-                            <div className="relative inline-block rounded-lg border bg-muted/20 p-1.5">
-                              {o.media_type === "video" ? (
-                                // eslint-disable-next-line jsx-a11y/media-has-caption
-                                <video src={o.media_url} className="max-h-24 rounded" controls />
-                              ) : (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={o.media_url} alt="" className="max-h-24 rounded object-contain" onError={(e: any) => { e.target.style.opacity = ".3"; }} />
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => { setOption(idx, { media_url: undefined, media_type: undefined }); toggleMedia(idx); }}
-                                className="absolute -right-2 -top-2 rounded-full bg-destructive p-0.5 text-white shadow"
-                                title="移除媒体"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>

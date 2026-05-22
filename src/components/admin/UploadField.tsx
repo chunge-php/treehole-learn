@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { uploadFile } from "@/lib/upload";
 import { AssetPickerDialog } from "./AssetPickerDialog";
+import { SafeImage } from "./SafeImage";
 import { toast } from "sonner";
 import { Upload, Loader2, X, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -127,8 +128,7 @@ export function UploadField({
       />
       {preview && value && isImage && (
         <div className="rounded-lg border bg-muted/20 p-2 inline-block">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={value} alt="" className="max-h-32 max-w-xs rounded object-contain" onError={(e: any) => { e.target.style.display = "none"; }} />
+          <SafeImage src={value} className="max-h-32 max-w-xs rounded object-contain min-h-[3rem] min-w-[3rem]" />
         </div>
       )}
 

@@ -110,7 +110,7 @@ export async function saveAnswer(sessionId: string, assessmentId: string, answer
   // 语音题: answer 为音频 URL → 调发展猫拿焦虑分
   let extend_json: any = undefined;
   const { data: qInfo } = await sb.from("assessments").select("qtype").eq("id", assessmentId).maybeSingle();
-  if (qInfo?.qtype === "语音题" && answer) {
+  if ((qInfo?.qtype as string) === "语音题" && answer) {
     extend_json = await analyzeAudio(answer, (sess as any).code || sessionId);
   }
 

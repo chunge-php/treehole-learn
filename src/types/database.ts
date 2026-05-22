@@ -2,26 +2,25 @@
 export type Database = {
   public: {
     Tables: {
-      accounts: {
-        Row: AccountRow;
-        Insert: Partial<AccountRow> & { username: string; password_hash: string; display_name: string };
-        Update: Partial<AccountRow>;
-      };
-      channels: { Row: ChannelRow; Insert: Partial<ChannelRow> & { name: string }; Update: Partial<ChannelRow> };
-      channel_levels: { Row: ChannelLevelRow; Insert: Partial<ChannelLevelRow> & { name: string }; Update: Partial<ChannelLevelRow> };
-      stores: { Row: StoreRow; Insert: Partial<StoreRow> & { name: string; channel_id: string }; Update: Partial<StoreRow> };
-      end_users: { Row: EndUserRow; Insert: Partial<EndUserRow> & { name: string; store_id: string; channel_id: string }; Update: Partial<EndUserRow> };
-      top_types: { Row: TopTypeRow; Insert: Partial<TopTypeRow> & { name: string }; Update: Partial<TopTypeRow> };
-      assessments: { Row: AssessmentRow; Insert: Partial<AssessmentRow> & { title: string; dimension: string; qtype: string }; Update: Partial<AssessmentRow> };
-      resources: { Row: ResourceRow; Insert: Partial<ResourceRow> & { title: string; type: string }; Update: Partial<ResourceRow> };
-      orders: { Row: OrderRow; Insert: Partial<OrderRow> & { order_no: string }; Update: Partial<OrderRow> };
-      assessment_records: { Row: AssessmentRecordRow; Insert: Partial<AssessmentRecordRow> & { end_user_id: string; channel_id: string; store_id: string }; Update: Partial<AssessmentRecordRow> };
-      import_jobs: { Row: ImportJobRow; Insert: Partial<ImportJobRow> & { account_id: string; entity: string }; Update: Partial<ImportJobRow> };
-      report_sessions: { Row: ReportSessionDbRow; Insert: Partial<ReportSessionDbRow> & { name: string }; Update: Partial<ReportSessionDbRow> };
-      report_answers: { Row: ReportAnswerRow; Insert: Partial<ReportAnswerRow> & { session_id: string; assessment_id: string }; Update: Partial<ReportAnswerRow> };
+      accounts: { Row: AccountRow; Insert: Partial<AccountRow> & { username: string; password_hash: string; display_name: string }; Update: Partial<AccountRow>; Relationships: [] };
+      channels: { Row: ChannelRow; Insert: Partial<ChannelRow> & { name: string }; Update: Partial<ChannelRow>; Relationships: [] };
+      channel_levels: { Row: ChannelLevelRow; Insert: Partial<ChannelLevelRow> & { name: string }; Update: Partial<ChannelLevelRow>; Relationships: [] };
+      stores: { Row: StoreRow; Insert: Partial<StoreRow> & { name: string; channel_id: string }; Update: Partial<StoreRow>; Relationships: [] };
+      end_users: { Row: EndUserRow; Insert: Partial<EndUserRow> & { name: string; store_id: string; channel_id: string }; Update: Partial<EndUserRow>; Relationships: [] };
+      top_types: { Row: TopTypeRow; Insert: Partial<TopTypeRow> & { name: string }; Update: Partial<TopTypeRow>; Relationships: [] };
+      assessments: { Row: AssessmentRow; Insert: Partial<AssessmentRow> & { title: string; dimension: string; qtype: string }; Update: Partial<AssessmentRow>; Relationships: [] };
+      resources: { Row: ResourceRow; Insert: Partial<ResourceRow> & { title: string; type: string }; Update: Partial<ResourceRow>; Relationships: [] };
+      orders: { Row: OrderRow; Insert: Partial<OrderRow> & { order_no: string }; Update: Partial<OrderRow>; Relationships: [] };
+      assessment_records: { Row: AssessmentRecordRow; Insert: Partial<AssessmentRecordRow> & { end_user_id: string; channel_id: string; store_id: string }; Update: Partial<AssessmentRecordRow>; Relationships: [] };
+      import_jobs: { Row: ImportJobRow; Insert: Partial<ImportJobRow> & { account_id: string; entity: string }; Update: Partial<ImportJobRow>; Relationships: [] };
+      report_sessions: { Row: ReportSessionDbRow; Insert: Partial<ReportSessionDbRow> & { name: string }; Update: Partial<ReportSessionDbRow>; Relationships: [] };
+      report_answers: { Row: ReportAnswerRow; Insert: Partial<ReportAnswerRow> & { session_id: string; assessment_id: string }; Update: Partial<ReportAnswerRow>; Relationships: [] };
+      assets: { Row: Record<string, any>; Insert: Record<string, any>; Update: Record<string, any>; Relationships: [] };
+      divisions: { Row: Record<string, any>; Insert: Record<string, any>; Update: Record<string, any>; Relationships: [] };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
+    CompositeTypes: Record<string, never>;
     Enums: {
       user_role: "super_admin" | "admin" | "channel_admin";
       account_status: "active" | "disabled";

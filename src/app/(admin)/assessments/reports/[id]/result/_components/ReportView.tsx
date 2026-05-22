@@ -223,9 +223,9 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
           <H3>兴趣类型分数图</H3>
           <p className="text-[11px] text-muted-foreground">各类兴趣类型得分直方图</p>
           <EChart option={barYOption} className="h-[180px] w-full" />
-          <div className="pl-8 pr-2 text-[11px]">
-            <div className="grid grid-cols-6 text-center"><span className="text-muted-foreground">得分排名</span>{scoresCake.slice(1).map((s: any) => { const r = barY.find(b => b.name === s.name); return <span key={s.name} className="font-bold" style={{ color: RIASEC_COLOR[s.name] }}>({r?.rank})</span>; })}</div>
-            <div className="grid grid-cols-6 text-center"><span className="text-muted-foreground">兴趣类型</span>{scoresCake.slice(1).map((s: any) => <span key={s.name} className="text-slate-600">{s.title}{s.name}</span>)}</div>
+          <div className="space-y-0.5 pl-8 pr-2 text-[11px]">
+            <div className="flex"><span className="w-12 shrink-0 text-muted-foreground">得分排名</span><div className="grid flex-1 grid-cols-6 text-center">{scoresCake.map((s: any) => { const r = barY.find(b => b.name === s.name); return <span key={s.name} className="font-bold" style={{ color: RIASEC_COLOR[s.name] }}>({r?.rank})</span>; })}</div></div>
+            <div className="flex"><span className="w-12 shrink-0 text-muted-foreground">兴趣类型</span><div className="grid flex-1 grid-cols-6 text-center">{scoresCake.map((s: any) => <span key={s.name} className="text-slate-600">{s.title}{s.name}</span>)}</div></div>
           </div>
         </div>
       </div>
@@ -304,7 +304,7 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
         if (i > 0) pdf.addPage();
         pdf.addImage(img, "JPEG", 0, 0, 210, 297);
       }
-      pdf.save(`个性化学习与发展评估报告_${report.name || ""}.pdf`);
+      pdf.save("个性化学习与发展评估报告.pdf");
     } catch (e: any) {
       toast.error(e?.message || "导出失败");
     } finally {
@@ -313,6 +313,7 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
   }
 
   const totalPages = pages.length + 1;
+  const fmtDate = (d?: string) => (d ? d.replace(/(\d{4})-(\d{2})-(\d{2})/, "$1年$2月$3日") : "—");
   const Header = () => (
     <div style={{ height: HEADER_H }}>
       <div className="flex items-end justify-between">
@@ -320,7 +321,7 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
         <img src="/report/logo.png" alt="发展猫" className="h-7 object-contain" onError={(e: any) => { e.target.style.display = "none"; }} />
         <div className="text-right leading-tight">
           <div className="text-sm font-bold text-primary">个人报告</div>
-          <div className="text-[11px] text-muted-foreground">评测日期：{report.dates || "—"} &nbsp; 编号：{report.code || "—"}</div>
+          <div className="text-[11px] text-muted-foreground">评测日期：{fmtDate(report.dates)} &nbsp; 编号：{report.code || "—"}</div>
         </div>
       </div>
       <div className="mt-1 border-t border-slate-200" />
@@ -374,8 +375,7 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
             <div className="flex-1 overflow-hidden pt-3 text-[13px] text-slate-700">
               {grp.map(i => <div key={i} style={{ marginBottom: 10 }}>{blocks[i]}</div>)}
             </div>
-            <div className="flex items-center justify-between border-t pt-1 text-[11px] text-muted-foreground" style={{ height: FOOTER_H }}>
-              <span>树洞 · TreeHole 学习力测评</span>
+            <div className="flex items-center justify-end border-t pt-1 text-[11px] text-muted-foreground" style={{ height: FOOTER_H }}>
               <span>第 {pi + 2} / {totalPages} 页</span>
             </div>
           </div>

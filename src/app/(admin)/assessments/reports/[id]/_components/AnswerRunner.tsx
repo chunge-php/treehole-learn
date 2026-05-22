@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SafeImage } from "@/components/admin/SafeImage";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
-import { saveAnswer, quickFillAnswers } from "../../actions";
+import { saveAnswer, quickFillAnswers, answerVoiceWithSample } from "../../actions";
 import { DIMENSION_VARIANT, QTYPE_VARIANT } from "../../../_components/constants";
 import { ArrowLeft, ChevronLeft, ChevronRight, Check, Loader2, LayoutGrid, FileBarChart, Mic, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -42,6 +42,26 @@ export function AnswerRunner({
   const [showNav, setShowNav] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickPending, startQuick] = useTransition();
+  // 语音题焦虑分展示 (本次作答得到的)
+  const [voiceExtend, setVoiceExtend] = useState<Record<string, { status_anxiety_score: number; trait_anxiety_score: number; learning_stress_score: number } | null>>({});
+
+  async function answerVoice() {
+    if (!q || savingId) return;
+    const wasAnswered = q.id in answers;
+    setSavingId(q.id);
+    try {
+      const r: any = await answerVoiceWithSample(sessionId, q.id);
+      setAnswers(prev => ({ ...prev, [q.id]: "(语音作答)" }));
+      setVoiceExtend(prev => ({ ...prev, [q.id]: r?.extend ?? null }));
+      if (!r?.extend) toast.warning("已作答, 但发展猫未返回焦虑分 (检查 FAZHANMAO_URL/网络)");
+      else toast.success("已获取多模态焦虑分");
+      if (!wasAnswered && idx < questions.length - 1) setIdx(i => i + 1);
+    } catch (e: any) {
+      toast.error(e?.message || "作答失败");
+    } finally {
+      setSavingId(null);
+    }
+  }
 
   const completed = total > 0 && answeredCount >= total;
   const q = questions[idx];
@@ -191,15 +211,22 @@ export function AnswerRunner({
         {/* 选项 / 语音题 */}
         {q.qtype === "语音题" ? (
           <div className="rounded-lg border border-dashed bg-muted/20 p-5 text-center space-y-3">
-            <p className="text-sm text-muted-foreground"><Mic className="inline h-4 w-4 -mt-0.5" /> 语音题由学员录音作答, 此处仅标记完成。</p>
+            <p className="text-sm text-muted-foreground"><Mic className="inline h-4 w-4 -mt-0.5" /> 语音题: 用测试语音调发展猫 API 获取多模态焦虑分。</p>
             <Button
               variant={q.id in answers ? "secondary" : "default"}
               disabled={savingId === q.id}
-              onClick={() => select("(语音作答)")}
+              onClick={answerVoice}
             >
-              {savingId === q.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              {q.id in answers ? "已标记 (点击重置)" : "标记已作答"}
+              {savingId === q.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+              {q.id in answers ? "重新用测试语音作答" : "用测试语音作答"}
             </Button>
+            {voiceExtend[q.id] && (
+              <div className="flex justify-center gap-4 pt-1 text-sm">
+                <span>状态焦虑 <b className="text-primary">{voiceExtend[q.id]!.status_anxiety_score}</b></span>
+                <span>特质焦虑 <b className="text-primary">{voiceExtend[q.id]!.trait_anxiety_score}</b></span>
+                <span>感知压力 <b className="text-primary">{voiceExtend[q.id]!.learning_stress_score}</b></span>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-2">

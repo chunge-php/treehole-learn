@@ -362,7 +362,12 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
             <div className="text-xl font-bold text-slate-700">个人报告</div>
             <div className="mt-20 space-y-4 text-[15px]">
               {[["测评姓名", report.name], ["测评编号", report.code], ["测评日期", report.dates]].map(([l, v]) => (
-                <div key={l} className="flex items-center justify-center gap-2"><span className="text-slate-600">{l}：</span><span className="font-medium tracking-widest">[&nbsp;&nbsp;{v || "—"}&nbsp;&nbsp;]</span></div>
+                <div key={l} className="flex items-center justify-center">
+                  <span className="w-20 text-right text-slate-600">{l}：</span>
+                  <span className="inline-flex w-52 items-center justify-between font-medium">
+                    <span>[</span><span className="flex-1 px-2 text-center">{v || "—"}</span><span>]</span>
+                  </span>
+                </div>
               ))}
             </div>
           </div>

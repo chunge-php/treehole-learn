@@ -165,7 +165,7 @@ on conflict (id) do update set
   sort_order = excluded.sort_order, status = excluded.status, updated_at = now();
 `;
 
-writeFileSync(OUT, head + body + ";\n" + tail, "utf8");
+writeFileSync(OUT, head + body + tail, "utf8");
 
 console.log("题目总数:", rows.length);
 console.log("维度分布:", stats.dim);

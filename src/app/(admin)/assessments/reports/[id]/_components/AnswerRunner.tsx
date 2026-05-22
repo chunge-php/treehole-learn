@@ -1,13 +1,14 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SafeImage } from "@/components/admin/SafeImage";
-import { saveAnswer } from "../../actions";
+import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
+import { saveAnswer, quickFillAnswers } from "../../actions";
 import { DIMENSION_VARIANT, QTYPE_VARIANT } from "../../../_components/constants";
-import { ArrowLeft, ChevronLeft, ChevronRight, Check, Loader2, LayoutGrid, FileBarChart, Mic } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Check, Loader2, LayoutGrid, FileBarChart, Mic, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -39,6 +40,8 @@ export function AnswerRunner({
   const [idx, setIdx] = useState(firstUnanswered === -1 ? 0 : firstUnanswered);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [showNav, setShowNav] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickPending, startQuick] = useTransition();
 
   const completed = total > 0 && answeredCount >= total;
   const q = questions[idx];
@@ -66,6 +69,19 @@ export function AnswerRunner({
     }
   }
 
+  function runQuickFill() {
+    startQuick(async () => {
+      try {
+        const r = await quickFillAnswers(sessionId);
+        setAnswers(r.answers);
+        setQuickOpen(false);
+        toast.success(`已自动填充 ${r.filled} 题, 全部 ${r.answered}/${r.total} 题完成`);
+      } catch (e: any) {
+        toast.error(e?.message || "操作失败");
+      }
+    });
+  }
+
   if (!q) {
     return (
       <Card className="p-8 text-center text-muted-foreground">
@@ -91,6 +107,11 @@ export function AnswerRunner({
           <Button variant="outline" size="sm" onClick={() => setShowNav(v => !v)}>
             <LayoutGrid className="h-3.5 w-3.5" /> 题目导航
           </Button>
+          {!completed && (
+            <Button variant="outline" size="sm" onClick={() => setQuickOpen(true)} disabled={quickPending}>
+              {quickPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />} 一键答完
+            </Button>
+          )}
           {completed ? (
             <Link href={`/assessments/reports/${sessionId}/result`}>
               <Button size="sm"><FileBarChart className="h-3.5 w-3.5" /> 查看报告</Button>
@@ -224,6 +245,16 @@ export function AnswerRunner({
           </Button>
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={quickOpen}
+        onOpenChange={v => !v && setQuickOpen(false)}
+        title="一键答完所有问题"
+        description={`将给剩余未答的 ${total - answeredCount} 道题随机填入有效答案并标记完成 (测试用), 已作答的不变。确定继续?`}
+        confirmText="一键答完"
+        loading={quickPending}
+        onConfirm={runQuickFill}
+      />
     </div>
   );
 }

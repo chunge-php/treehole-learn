@@ -58,3 +58,20 @@ function calcOptionScore(string $answer, int $totalOptions): ?int
     // 最高分 = 总数，最低 = 1
     return $totalOptions - ($position - 1);
 }
+/**
+ * 根据得分计算百分比并判断高低
+ *
+ * @param int|float $total   总数
+ * @param int|float $score   得分
+ * @return int
+ */
+function getPercentResult($total, $score)
+{
+    if ($total <= 0) {
+        return 0;
+    }
+    // 计算百分比
+    $percent = ($score / $total) * 100;
+    // 判断结果
+    return $percent >= 50 ? 1 : 0;
+}

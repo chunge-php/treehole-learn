@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,8 @@ type Assignment = {
 
 type Filter = "all" | "pending" | "done";
 
+const NAME_MAX = 30;
+
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -50,16 +52,18 @@ export function AssignmentsDialog({
   const open = !!target;
   const [rows, setRows] = useState<Assignment[]>([]);
   const [filter, setFilter] = useState<Filter>("pending");
+  const [addOpen, setAddOpen] = useState(false);
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState(todayStr());
   const [endDate, setEndDate] = useState(plusDays(todayStr(), 6));
   const [delTarget, setDelTarget] = useState<Assignment | null>(null);
+  const [doneTarget, setDoneTarget] = useState<Assignment | null>(null);
   const [loading, startLoading] = useTransition();
   const [, startMutate] = useTransition();
 
   useEffect(() => {
     if (!open || !target) return;
-    setName(""); setStartDate(todayStr()); setEndDate(plusDays(todayStr(), 6));
+    setAddOpen(false);
     setFilter("pending");
     load("pending");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -82,15 +86,24 @@ export function AssignmentsDialog({
     load(f);
   }
 
+  function openAdd() {
+    setName("");
+    setStartDate(todayStr());
+    setEndDate(plusDays(todayStr(), 6));
+    setAddOpen(true);
+  }
+
   function onSubmit() {
     if (!target) return;
-    if (!name.trim()) { toast.error("请填写任务名称"); return; }
+    const trimmed = name.trim();
+    if (!trimmed) { toast.error("请填写任务名称"); return; }
+    if (trimmed.length > NAME_MAX) { toast.error(`任务名称最多 ${NAME_MAX} 字`); return; }
     if (startDate > endDate) { toast.error("结束日期不能早于开始日期"); return; }
     startMutate(async () => {
       try {
-        await createAssignment({ end_user_id: target.id, name: name.trim(), start_date: startDate, end_date: endDate });
-        setName("");
+        await createAssignment({ end_user_id: target.id, name: trimmed, start_date: startDate, end_date: endDate });
         toast.success("已添加");
+        setAddOpen(false);
         load();
         onChanged?.();
       } catch (e: any) {
@@ -99,7 +112,17 @@ export function AssignmentsDialog({
     });
   }
 
-  function onToggle(a: Assignment, done: boolean) {
+  function onCheckToggle(a: Assignment, next: boolean) {
+    if (next) {
+      // 标记完成 → 先确认
+      setDoneTarget(a);
+    } else {
+      // 取消完成 → 直接执行
+      runToggle(a, false);
+    }
+  }
+
+  function runToggle(a: Assignment, done: boolean) {
     startMutate(async () => {
       try {
         await toggleAssignmentDone(a.id, done);
@@ -109,6 +132,13 @@ export function AssignmentsDialog({
         toast.error(e?.message || "更新失败");
       }
     });
+  }
+
+  function onConfirmDone() {
+    if (!doneTarget) return;
+    const a = doneTarget;
+    setDoneTarget(null);
+    runToggle(a, true);
   }
 
   function onDelete() {
@@ -143,49 +173,33 @@ export function AssignmentsDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">新增任务</div>
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] gap-2 items-end">
-              <div className="space-y-1">
-                <Label className="text-xs">任务名称</Label>
-                <Input value={name} onChange={e => setName(e.target.value)} placeholder="如：每日朗读 20 分钟" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">开始</Label>
-                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-36" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">结束</Label>
-                <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-36" />
-              </div>
-              <Button onClick={onSubmit} className="md:mb-0">
-                <Plus className="h-4 w-4" /> 添加
-              </Button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-xs">
+              {(["pending", "done", "all"] as Filter[]).map(f => (
+                <button
+                  key={f}
+                  onClick={() => onFilterChange(f)}
+                  className={
+                    "rounded-md px-2.5 py-1 transition " +
+                    (filter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")
+                  }
+                >
+                  {f === "pending" ? "未完成" : f === "done" ? "已完成" : "全部"}
+                  {filter === f && rows.length > 0 && (
+                    <span className="ml-1 opacity-80">({rows.length})</span>
+                  )}
+                </button>
+              ))}
             </div>
-          </div>
-
-          <div className="flex items-center gap-1 text-xs">
-            {(["pending", "done", "all"] as Filter[]).map(f => (
-              <button
-                key={f}
-                onClick={() => onFilterChange(f)}
-                className={
-                  "rounded-md px-2.5 py-1 transition " +
-                  (filter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")
-                }
-              >
-                {f === "pending" ? "未完成" : f === "done" ? "已完成" : "全部"}
-                {filter === f && rows.length > 0 && (
-                  <span className="ml-1 opacity-80">({rows.length})</span>
-                )}
-              </button>
-            ))}
-            <div className="ml-auto text-muted-foreground">
+            <span className="ml-auto text-xs text-muted-foreground hidden sm:inline">
               未完成 {pendingCount} · 已完成 {doneCount}
-            </div>
+            </span>
+            <Button size="sm" onClick={openAdd}>
+              <Plus className="h-4 w-4" /> 添加任务
+            </Button>
           </div>
 
-          <div className="max-h-[40vh] overflow-y-auto -mx-1 px-1">
+          <div className="max-h-[55vh] min-h-[20vh] overflow-y-auto -mx-1 px-1">
             {loading ? (
               <div className="py-10 flex items-center justify-center text-muted-foreground text-sm">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 加载中…
@@ -194,17 +208,17 @@ export function AssignmentsDialog({
               <EmptyState
                 icon={ClipboardList}
                 title={filter === "done" ? "暂无已完成任务" : filter === "pending" ? "暂无未完成任务" : "还没有任务"}
-                description="在上方表单添加第一个任务"
+                description="点击右上角「添加任务」创建第一个任务"
               />
             ) : (
               <ul className="divide-y rounded-md border">
                 {rows.map(a => {
                   const done = !!a.completed_at;
                   return (
-                    <li key={a.id} className="flex items-center gap-3 px-3 py-2.5 group">
+                    <li key={a.id} className="flex items-center gap-3 px-3 py-2.5">
                       <Checkbox
                         checked={done}
-                        onCheckedChange={v => onToggle(a, !!v)}
+                        onCheckedChange={v => onCheckToggle(a, !!v)}
                       />
                       <div className="min-w-0 flex-1">
                         <div className={"text-sm truncate " + (done ? "line-through text-muted-foreground" : "")}>
@@ -223,7 +237,7 @@ export function AssignmentsDialog({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
+                        className="text-muted-foreground/60 hover:text-destructive"
                         onClick={() => setDelTarget(a)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -236,6 +250,58 @@ export function AssignmentsDialog({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 添加任务子弹窗 */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>新增任务</DialogTitle>
+            <DialogDescription>为「{target?.name}」安排一个周期任务。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">任务名称</Label>
+                <span className={"text-[11px] " + (name.length > NAME_MAX ? "text-destructive" : "text-muted-foreground")}>
+                  {name.length}/{NAME_MAX}
+                </span>
+              </div>
+              <Input
+                value={name}
+                maxLength={NAME_MAX}
+                onChange={e => setName(e.target.value)}
+                placeholder="如：每日朗读 20 分钟"
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">开始日期</Label>
+                <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">结束日期</Label>
+                <Input type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>取消</Button>
+            <Button onClick={onSubmit}>
+              <Plus className="h-4 w-4" /> 添加
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={!!doneTarget}
+        onOpenChange={v => !v && setDoneTarget(null)}
+        title="标记为已完成"
+        description={`确定将任务「${doneTarget?.name}」标记为已完成吗？`}
+        confirmText="确认完成"
+        onConfirm={onConfirmDone}
+      />
 
       <ConfirmDialog
         open={!!delTarget}

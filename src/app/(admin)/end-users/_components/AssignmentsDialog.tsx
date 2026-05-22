@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/admin/EmptyState";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
-import { ClipboardList, Plus, Trash2, Loader2, CalendarRange } from "lucide-react";
+import { ClipboardList, Plus, Trash2, Loader2, CalendarRange, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { formatDateCN } from "@/lib/utils";
 import {
@@ -30,14 +30,31 @@ type Filter = "all" | "pending" | "done";
 
 const NAME_MAX = 30;
 
-function todayStr() {
-  const d = new Date();
+function fmtDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function todayStr() {
+  return fmtDate(new Date());
 }
 function plusDays(base: string, days: number) {
   const d = new Date(base);
   d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return fmtDate(d);
+}
+/** 以周一为一周起点，offset=0 本周，-1 上周，+1 下周 */
+function weekRange(offset: number) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  const dow = (d.getDay() + 6) % 7; // 周一=0
+  d.setDate(d.getDate() - dow + offset * 7);
+  const start = new Date(d);
+  const end = new Date(d);
+  end.setDate(end.getDate() + 6);
+  return { start: fmtDate(start), end: fmtDate(end) };
+}
+function fmtShort(s: string) {
+  const [, m, day] = s.split("-");
+  return `${Number(m)}/${Number(day)}`;
 }
 
 export function AssignmentsDialog({
@@ -52,6 +69,8 @@ export function AssignmentsDialog({
   const open = !!target;
   const [rows, setRows] = useState<Assignment[]>([]);
   const [filter, setFilter] = useState<Filter>("pending");
+  const [weekMode, setWeekMode] = useState(false);
+  const [weekOffset, setWeekOffset] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState(todayStr());
@@ -65,6 +84,8 @@ export function AssignmentsDialog({
     if (!open || !target) return;
     setAddOpen(false);
     setFilter("pending");
+    setWeekMode(false);
+    setWeekOffset(0);
     load("pending");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, target?.id]);
@@ -84,6 +105,18 @@ export function AssignmentsDialog({
   function onFilterChange(f: Filter) {
     setFilter(f);
     load(f);
+  }
+
+  const week = useMemo(() => weekRange(weekOffset), [weekOffset]);
+  const visibleRows = useMemo(() => {
+    if (!weekMode) return rows;
+    // 任务区间与本周有交集即显示
+    return rows.filter(a => a.start_date <= week.end && a.end_date >= week.start);
+  }, [rows, weekMode, week]);
+
+  function gotoWeek(delta: number) {
+    setWeekMode(true);
+    setWeekOffset(o => o + delta);
   }
 
   function openAdd() {
@@ -114,11 +147,9 @@ export function AssignmentsDialog({
 
   function onCheckToggle(a: Assignment, next: boolean) {
     if (next) {
-      // 标记完成 → 先确认
-      setDoneTarget(a);
+      setDoneTarget(a); // 标记完成 → 先确认
     } else {
-      // 取消完成 → 直接执行
-      runToggle(a, false);
+      runToggle(a, false); // 取消完成 → 直接执行
     }
   }
 
@@ -156,13 +187,13 @@ export function AssignmentsDialog({
     });
   }
 
-  const pendingCount = rows.filter(r => !r.completed_at).length;
-  const doneCount = rows.filter(r => !!r.completed_at).length;
+  const pendingCount = visibleRows.filter(r => !r.completed_at).length;
+  const doneCount = visibleRows.filter(r => !!r.completed_at).length;
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
               <ClipboardList className="h-5 w-5" />
@@ -185,9 +216,6 @@ export function AssignmentsDialog({
                   }
                 >
                   {f === "pending" ? "未完成" : f === "done" ? "已完成" : "全部"}
-                  {filter === f && rows.length > 0 && (
-                    <span className="ml-1 opacity-80">({rows.length})</span>
-                  )}
                 </button>
               ))}
             </div>
@@ -199,20 +227,47 @@ export function AssignmentsDialog({
             </Button>
           </div>
 
+          {/* 按周快捷筛选 */}
+          <div className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-1.5 py-1">
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => gotoWeek(-1)} title="上一周">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <button
+              onClick={() => setWeekMode(m => !m)}
+              className={
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition " +
+                (weekMode ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted")
+              }
+              title={weekMode ? "点击查看全部" : "点击按周筛选"}
+            >
+              <CalendarRange className="h-3.5 w-3.5" />
+              {weekMode ? `${fmtShort(week.start)} - ${fmtShort(week.end)}` : "全部时间"}
+              {weekMode && weekOffset === 0 && <span className="text-[10px] opacity-70">本周</span>}
+            </button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => gotoWeek(1)} title="下一周">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            {weekMode && weekOffset !== 0 && (
+              <Button variant="link" size="sm" className="h-7 px-1 text-xs" onClick={() => setWeekOffset(0)}>
+                回本周
+              </Button>
+            )}
+          </div>
+
           <div className="max-h-[55vh] min-h-[20vh] overflow-y-auto -mx-1 px-1">
             {loading ? (
               <div className="py-10 flex items-center justify-center text-muted-foreground text-sm">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 加载中…
               </div>
-            ) : rows.length === 0 ? (
+            ) : visibleRows.length === 0 ? (
               <EmptyState
                 icon={ClipboardList}
-                title={filter === "done" ? "暂无已完成任务" : filter === "pending" ? "暂无未完成任务" : "还没有任务"}
-                description="点击右上角「添加任务」创建第一个任务"
+                title={weekMode ? "本周区间内暂无任务" : filter === "done" ? "暂无已完成任务" : filter === "pending" ? "暂无未完成任务" : "还没有任务"}
+                description={weekMode ? "切换周次或点「全部时间」查看" : "点击右上角「添加任务」创建第一个任务"}
               />
             ) : (
               <ul className="divide-y rounded-md border">
-                {rows.map(a => {
+                {visibleRows.map(a => {
                   const done = !!a.completed_at;
                   return (
                     <li key={a.id} className="flex items-center gap-3 px-3 py-2.5">

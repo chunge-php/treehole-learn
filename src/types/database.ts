@@ -17,6 +17,8 @@ export type Database = {
       orders: { Row: OrderRow; Insert: Partial<OrderRow> & { order_no: string }; Update: Partial<OrderRow> };
       assessment_records: { Row: AssessmentRecordRow; Insert: Partial<AssessmentRecordRow> & { end_user_id: string; channel_id: string; store_id: string }; Update: Partial<AssessmentRecordRow> };
       import_jobs: { Row: ImportJobRow; Insert: Partial<ImportJobRow> & { account_id: string; entity: string }; Update: Partial<ImportJobRow> };
+      report_sessions: { Row: ReportSessionDbRow; Insert: Partial<ReportSessionDbRow> & { name: string }; Update: Partial<ReportSessionDbRow> };
+      report_answers: { Row: ReportAnswerRow; Insert: Partial<ReportAnswerRow> & { session_id: string; assessment_id: string }; Update: Partial<ReportAnswerRow> };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -204,4 +206,28 @@ export type ImportJobRow = {
   status: "pending" | "processing" | "success" | "partial" | "failed";
   created_at: string;
   finished_at: string | null;
+};
+
+export type ReportSessionDbRow = {
+  id: string;
+  seq_no: number;
+  name: string;
+  remark: string | null;
+  question_ids: string[];
+  total_questions: number;
+  answered_count: number;
+  status: "in_progress" | "completed";
+  report_data: unknown | null;
+  created_by: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReportAnswerRow = {
+  id: string;
+  session_id: string;
+  assessment_id: string;
+  answer: string | null;
+  answered_at: string;
 };

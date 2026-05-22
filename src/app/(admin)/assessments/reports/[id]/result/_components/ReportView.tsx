@@ -320,6 +320,23 @@ export function ReportView({ report, sessionId, mode = "admin" }: { report: any;
     }
   }
 
+  async function copyPublicLink() {
+    const url = `${window.location.origin}/report/${sessionId}`;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = url; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        document.execCommand("copy"); document.body.removeChild(ta);
+      }
+      toast.success("公开预览链接已复制 (免登录可直接打开)");
+    } catch {
+      toast.info("复制失败, 请手动复制: " + url, { duration: 10000 });
+    }
+  }
+
   const totalPages = pages.length + 1;
   const fmtDate = (d?: string) => (d ? d.replace(/(\d{4})-(\d{2})-(\d{2})/, "$1年$2月$3日") : "—");
   const Header = () => (
@@ -344,7 +361,7 @@ export function ReportView({ report, sessionId, mode = "admin" }: { report: any;
         {mode === "admin" && (
           <>
             <Link href="/assessments/reports"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /> 返回列表</Button></Link>
-            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/report/${sessionId}`); toast.success("公开预览链接已复制 (免登录可直接打开)"); }}>
+            <Button variant="outline" size="sm" onClick={copyPublicLink}>
               <LinkIcon className="h-4 w-4" /> 公开链接
             </Button>
           </>

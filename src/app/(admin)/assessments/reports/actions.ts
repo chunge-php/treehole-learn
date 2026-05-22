@@ -3,6 +3,14 @@ import { revalidatePath } from "next/cache";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth";
 import { shortId } from "@/lib/utils";
+import { analyzeAudio, SAMPLE_AUDIO } from "@/lib/report/fazhanmao";
+import { uploadAudioToObs, obsConfigured } from "@/lib/report/huawei-obs";
+
+/** 报告流水号: XXL + 7位补零 */
+function buildSerial(num: number): string {
+  const s = String(Math.trunc(num));
+  return "XXL" + s.padStart(7, "0");
+}
 
 export type ReportSessionRow = {
   id: string;
@@ -44,7 +52,7 @@ export async function createReportSession(input: { name: string; remark?: string
   if (!ids.length) throw new Error("题库暂无启用的题目, 无法创建测评");
 
   const id = shortId("rs");
-  const { error: e2 } = await sb.from("report_sessions").insert({
+  const { data: created, error: e2 } = await sb.from("report_sessions").insert({
     id,
     name,
     remark: input.remark?.trim() || null,
@@ -53,8 +61,11 @@ export async function createReportSession(input: { name: string; remark?: string
     answered_count: 0,
     status: "in_progress",
     created_by: s.account_id
-  });
+  }).select("seq_no").single();
   if (e2) throw new Error(e2.message);
+  // 生成报告流水号 (作发展猫 audio_id)
+  const code = buildSerial((created as any)?.seq_no ?? 0);
+  await sb.from("report_sessions").update({ code }).eq("id", id);
   revalidatePath("/assessments/reports");
   return { id };
 }
@@ -88,12 +99,19 @@ export async function saveAnswer(sessionId: string, assessmentId: string, answer
 
   const { data: sess } = await sb
     .from("report_sessions")
-    .select("id, total_questions, status, question_ids")
+    .select("id, total_questions, status, question_ids, code")
     .eq("id", sessionId)
     .maybeSingle();
   if (!sess) throw new Error("记录不存在");
   const validIds: string[] = Array.isArray(sess.question_ids) ? sess.question_ids : [];
   if (!validIds.includes(assessmentId)) throw new Error("该题不属于此测评记录");
+
+  // 语音题: answer 为音频 URL → 调发展猫拿焦虑分
+  let extend_json: any = undefined;
+  const { data: qInfo } = await sb.from("assessments").select("qtype").eq("id", assessmentId).maybeSingle();
+  if (qInfo?.qtype === "语音题" && answer) {
+    extend_json = await analyzeAudio(answer, (sess as any).code || sessionId);
+  }
 
   const { data: existing } = await sb
     .from("report_answers")
@@ -102,14 +120,15 @@ export async function saveAnswer(sessionId: string, assessmentId: string, answer
     .eq("assessment_id", assessmentId)
     .maybeSingle();
 
+  const payload: any = { answer, answered_at: new Date().toISOString() };
+  if (extend_json !== undefined) payload.extend_json = extend_json;
+
   if (existing) {
-    const { error } = await sb.from("report_answers")
-      .update({ answer, answered_at: new Date().toISOString() })
-      .eq("id", existing.id);
+    const { error } = await sb.from("report_answers").update(payload).eq("id", existing.id);
     if (error) throw new Error(error.message);
   } else {
     const { error } = await sb.from("report_answers")
-      .insert({ id: shortId("ra"), session_id: sessionId, assessment_id: assessmentId, answer });
+      .insert({ id: shortId("ra"), session_id: sessionId, assessment_id: assessmentId, ...payload });
     if (error) throw new Error(error.message);
   }
 
@@ -126,17 +145,17 @@ export async function saveAnswer(sessionId: string, assessmentId: string, answer
   if (!completed && sess.status === "completed") { patch.status = "in_progress"; patch.completed_at = null; }
   await sb.from("report_sessions").update(patch).eq("id", sessionId);
 
-  return { answered, total, completed };
+  return { answered, total, completed, extend: extend_json ?? null };
 }
 
-/** 测试用: 给所有未答题随机填一个有效答案并标记完成 */
+/** 测试用: 给所有未答题随机填一个有效答案并标记完成; 语音题用测试音频调发展猫拿焦虑分 */
 export async function quickFillAnswers(sessionId: string) {
   requireAdmin();
   const sb = adminSupabase();
 
   const { data: sess } = await sb
     .from("report_sessions")
-    .select("id, question_ids, total_questions")
+    .select("id, question_ids, total_questions, code")
     .eq("id", sessionId)
     .maybeSingle();
   if (!sess) throw new Error("记录不存在");
@@ -149,17 +168,24 @@ export async function quickFillAnswers(sessionId: string) {
   const { data: allQ } = await sb.from("assessments").select("id, options, qtype");
   const qmap = new Map((allQ || []).map((q: any) => [q.id, q]));
 
+  // 语音题: 用测试音频调发展猫拿焦虑分 (一次性算好, 题量通常仅 1 道)
+  let voiceExtend: any = null;
+  const hasVoice = ids.some(qid => !(qid in answerMap) && (qmap.get(qid) as any)?.qtype === "语音题");
+  if (hasVoice) voiceExtend = await analyzeAudio(SAMPLE_AUDIO, (sess as any).code || sessionId);
+
   const toInsert: any[] = [];
   for (const qid of ids) {
     if (qid in answerMap) continue;
     const q: any = qmap.get(qid);
     const opts = Array.isArray(q?.options) ? q.options : [];
+    const isVoice = q?.qtype === "语音题";
     let val = "(语音作答)";
-    if (q?.qtype !== "语音题" && opts.length) {
-      const pick = opts[Math.floor(Math.random() * opts.length)];
-      val = pick?.value || "A";
-    }
-    toInsert.push({ id: shortId("ra"), session_id: sessionId, assessment_id: qid, answer: val });
+    let extend: any = undefined;
+    if (isVoice) { val = SAMPLE_AUDIO; extend = voiceExtend; }
+    else if (opts.length) { val = opts[Math.floor(Math.random() * opts.length)]?.value || "A"; }
+    const row: any = { id: shortId("ra"), session_id: sessionId, assessment_id: qid, answer: val };
+    if (extend !== undefined) row.extend_json = extend;
+    toInsert.push(row);
     answerMap[qid] = val;
   }
 
@@ -180,6 +206,31 @@ export async function quickFillAnswers(sessionId: string) {
 
   revalidatePath("/assessments/reports");
   return { answers: answerMap, answered, total, completed, filled: toInsert.length };
+}
+
+/** 用测试语音作答语音题 (调发展猫拿真实焦虑分) */
+export async function answerVoiceWithSample(sessionId: string, assessmentId: string) {
+  requireAdmin();
+  return saveAnswer(sessionId, assessmentId, SAMPLE_AUDIO);
+}
+
+/** 上传语音音频到华为 OBS, 返回可被发展猫读取的 URL */
+export async function uploadVoiceAudio(formData: FormData, sessionId: string) {
+  requireAdmin();
+  if (!obsConfigured()) throw new Error("华为 OBS 未配置, 暂用测试语音");
+  const sb = adminSupabase();
+  const { data: sess } = await sb.from("report_sessions").select("code").eq("id", sessionId).maybeSingle();
+  const file = formData.get("file");
+  if (!(file instanceof File)) throw new Error("未选择文件");
+  const ext = (file.name.split(".").pop() || "wav").toLowerCase();
+  const buf = Buffer.from(await file.arrayBuffer());
+  const { url } = await uploadAudioToObs(buf, {
+    uid: "1",
+    code: (sess as any)?.code || sessionId,
+    ext,
+    contentType: file.type || "audio/wav",
+  });
+  return { url };
 }
 
 export async function deleteReportSession(id: string) {

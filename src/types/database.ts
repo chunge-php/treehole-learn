@@ -218,6 +218,7 @@ export type ReportSessionDbRow = {
   answered_count: number;
   status: "in_progress" | "completed";
   report_data: unknown | null;
+  code: string | null;
   created_by: string | null;
   completed_at: string | null;
   created_at: string;
@@ -229,5 +230,6 @@ export type ReportAnswerRow = {
   session_id: string;
   assessment_id: string;
   answer: string | null;
+  extend_json: unknown | null;
   answered_at: string;
 };

@@ -273,9 +273,11 @@ export function calcAllLevels(stateScore: number, traitScore: number, studyScore
   const stateLevel = stateScore < 33 ? 2 : stateScore < 57 ? 1 : 0;
   const traitLevel = traitScore < 34 ? 2 : traitScore < 52 ? 1 : 0;
   const studyLevel = studyScore <= 28 ? 2 : studyScore <= 42 ? 1 : 0;
+  // 回填 status 等级 (原 PHP $value, 解析时丢失)
+  const withStatus = (o: any, level: number) => (o ? { ...o, status: level } : null);
   return {
-    state: C.arithmetic.stateAnxietyResult[String(stateLevel)] ?? null,
-    trait: C.arithmetic.traitAnxietyResult[String(traitLevel)] ?? null,
-    study: C.arithmetic.studyScoreResult[String(studyLevel)] ?? null,
+    state: withStatus(C.arithmetic.stateAnxietyResult[String(stateLevel)], stateLevel),
+    trait: withStatus(C.arithmetic.traitAnxietyResult[String(traitLevel)], traitLevel),
+    study: withStatus(C.arithmetic.studyScoreResult[String(studyLevel)], studyLevel),
   };
 }

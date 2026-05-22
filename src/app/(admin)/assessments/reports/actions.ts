@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth";
 import { shortId } from "@/lib/utils";
 import { analyzeAudio, SAMPLE_AUDIO } from "@/lib/report/fazhanmao";
 import { uploadAudioToObs, obsConfigured } from "@/lib/report/huawei-obs";
+import { buildReportItems, generateReport } from "@/lib/report/generate";
 
 /** 报告流水号: XXL + 7位补零 */
 function buildSerial(num: number): string {
@@ -231,6 +232,28 @@ export async function uploadVoiceAudio(formData: FormData, sessionId: string) {
     contentType: file.type || "audio/wav",
   });
   return { url };
+}
+
+/** 生成报告数据 (value1~value10), 供结果页渲染 */
+export async function generateSessionReport(sessionId: string) {
+  requireAdmin();
+  const sb = adminSupabase();
+  const { data: session } = await sb.from("report_sessions").select("*").eq("id", sessionId).maybeSingle();
+  if (!session) return null;
+
+  const ids: string[] = Array.isArray(session.question_ids) ? session.question_ids : [];
+  const { data: allQ } = await sb.from("assessments").select("id, dimension, qtype, answer, project_name, options");
+  const qmap = new Map((allQ || []).map((q: any) => [q.id, q]));
+  const questions = ids.map(id => qmap.get(id)).filter(Boolean);
+
+  const { data: ans } = await sb.from("report_answers").select("assessment_id, answer, extend_json").eq("session_id", sessionId);
+  const answers: Record<string, string | null> = {};
+  const extendMap: Record<string, any> = {};
+  (ans || []).forEach((a: any) => { answers[a.assessment_id] = a.answer; if (a.extend_json) extendMap[a.assessment_id] = a.extend_json; });
+
+  const items = buildReportItems(questions as any, answers, extendMap);
+  const dates = String((session as any).completed_at || (session as any).created_at || "").slice(0, 10);
+  return generateReport(items, { name: (session as any).name, code: (session as any).code || "", dates });
 }
 
 export async function deleteReportSession(id: string) {

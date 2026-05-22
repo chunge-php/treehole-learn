@@ -129,6 +129,59 @@ export async function saveAnswer(sessionId: string, assessmentId: string, answer
   return { answered, total, completed };
 }
 
+/** 测试用: 给所有未答题随机填一个有效答案并标记完成 */
+export async function quickFillAnswers(sessionId: string) {
+  requireAdmin();
+  const sb = adminSupabase();
+
+  const { data: sess } = await sb
+    .from("report_sessions")
+    .select("id, question_ids, total_questions")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (!sess) throw new Error("记录不存在");
+  const ids: string[] = Array.isArray(sess.question_ids) ? sess.question_ids : [];
+
+  const { data: existing } = await sb.from("report_answers").select("assessment_id, answer").eq("session_id", sessionId);
+  const answerMap: Record<string, string | null> = {};
+  (existing || []).forEach((a: any) => { answerMap[a.assessment_id] = a.answer; });
+
+  const { data: allQ } = await sb.from("assessments").select("id, options, qtype");
+  const qmap = new Map((allQ || []).map((q: any) => [q.id, q]));
+
+  const toInsert: any[] = [];
+  for (const qid of ids) {
+    if (qid in answerMap) continue;
+    const q: any = qmap.get(qid);
+    const opts = Array.isArray(q?.options) ? q.options : [];
+    let val = "(语音作答)";
+    if (q?.qtype !== "语音题" && opts.length) {
+      const pick = opts[Math.floor(Math.random() * opts.length)];
+      val = pick?.value || "A";
+    }
+    toInsert.push({ id: shortId("ra"), session_id: sessionId, assessment_id: qid, answer: val });
+    answerMap[qid] = val;
+  }
+
+  for (let i = 0; i < toInsert.length; i += 200) {
+    const { error } = await sb.from("report_answers").insert(toInsert.slice(i, i + 200));
+    if (error) throw new Error(error.message);
+  }
+
+  const answered = ids.filter(id => id in answerMap).length;
+  const total = sess.total_questions || ids.length;
+  const completed = total > 0 && answered >= total;
+  await sb.from("report_sessions").update({
+    answered_count: answered,
+    status: completed ? "completed" : "in_progress",
+    completed_at: completed ? new Date().toISOString() : null,
+    updated_at: new Date().toISOString()
+  }).eq("id", sessionId);
+
+  revalidatePath("/assessments/reports");
+  return { answers: answerMap, answered, total, completed, filled: toInsert.length };
+}
+
 export async function deleteReportSession(id: string) {
   requireAdmin();
   const sb = adminSupabase();

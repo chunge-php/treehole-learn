@@ -1,10 +1,18 @@
 "use client";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { EChart } from "@/components/admin/EChart";
-import { ArrowLeft, Download, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
+
+// 测量阶段图表渲染为占位 div, 不初始化 echarts (避免双重渲染拖慢)
+const MeasuringCtx = createContext(false);
+function ChartBlock({ height, option }: { height: number; option: any }) {
+  const measuring = useContext(MeasuringCtx);
+  if (measuring) return <div style={{ height }} />;
+  return <EChart option={option} style={{ height, width: "100%" }} />;
+}
 
 // A4 @96dpi
 const PAGE_W = 794;
@@ -65,7 +73,7 @@ const H3 = ({ children }: { children: React.ReactNode }) => <h3 className="font-
 const Em = ({ children }: { children: React.ReactNode }) => <span className="font-semibold text-primary">{children}</span>;
 const P = ({ children }: { children: React.ReactNode }) => <p className="leading-relaxed text-slate-600">{children}</p>;
 
-export function ReportView({ report, sessionId }: { report: any; sessionId: string }) {
+export function ReportView({ report, sessionId, mode = "admin" }: { report: any; sessionId: string; mode?: "admin" | "public" }) {
   const [downloading, setDownloading] = useState(false);
 
   const value4 = report.value4 || {};
@@ -154,7 +162,7 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
     </div>
   );
   push(<H3>各维度数据展示</H3>);
-  push(<EChart option={pieOption} className="h-[260px] w-full" />);
+  push(<ChartBlock height={260} option={pieOption} />);
 
   push(<SecTitle n="二" title="综合结论与类型界定" />);
   push(
@@ -198,13 +206,13 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
   push(<P><Em>测评核心：</Em>聚焦日常及压力场景下的情绪表现，重点观察面对考试、学习挫折时的心态变化。</P>);
   push(<p className="font-semibold text-primary">结果解读：</p>);
   ["status_anxiety", "trait_anxiety", "study_anxiety"].forEach(k => value4[k] && push(<p key={k} className="leading-relaxed text-slate-600"><b className="text-slate-800">{value4[k].title}：</b>{value4[k].result}</p>));
-  push(<EChart option={barOption} className="h-[260px] w-full" />);
+  push(<ChartBlock height={260} option={barOption} />);
 
   push(<H3>（二）多元性向潜能发展测评</H3>);
   push(<P><Em>测评核心：</Em>从语文辞意、数学概念、抽象逻辑、立体空间、中文字词、中文语法等多个角度，观察学习相关的核心能力表现，判断不同学科学习中的优势与待提升点。</P>);
   push(<p className="font-semibold text-primary">结果解读：</p>);
   value6.forEach((it, i) => push(<p key={i} className="leading-relaxed text-slate-600"><b className="text-slate-800">{it.title}：</b>{it.content}</p>));
-  push(<EChart option={barXOption} className="h-[270px] w-full" />);
+  push(<ChartBlock height={270} option={barXOption} />);
 
   push(<H3>（三）兴趣测评</H3>);
   push(<P><Em>测评核心：</Em>通过观察对不同活动、职业、课程的偏好，明确兴趣倾向，为学习动力激发、未来选科和职业规划提供参考。</P>);
@@ -217,12 +225,12 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
           <H3>兴趣组型</H3>
           <p className="text-[11px] text-muted-foreground">兴趣量表测验所得的兴趣组型</p>
           <div className="my-1 flex justify-around">{data1.map((it: any, i: number) => (<div key={i} className="text-center"><div className="text-3xl font-bold" style={{ color: it.color }}>{it.value}</div><div className="text-xs text-slate-600">{it.name}</div></div>))}</div>
-          <EChart option={radarOption} className="h-[200px] w-full" />
+          <ChartBlock height={200} option={radarOption} />
         </div>
         <div>
           <H3>兴趣类型分数图</H3>
           <p className="text-[11px] text-muted-foreground">各类兴趣类型得分直方图</p>
-          <EChart option={barYOption} className="h-[180px] w-full" />
+          <ChartBlock height={180} option={barYOption} />
           <div className="space-y-0.5 pl-8 pr-2 text-[11px]">
             <div className="flex"><span className="w-12 shrink-0 text-muted-foreground">得分排名</span><div className="grid flex-1 grid-cols-6 text-center">{scoresCake.map((s: any) => { const r = barY.find(b => b.name === s.name); return <span key={s.name} className="font-bold" style={{ color: RIASEC_COLOR[s.name] }}>({r?.rank})</span>; })}</div></div>
             <div className="flex"><span className="w-12 shrink-0 text-muted-foreground">兴趣类型</span><div className="grid flex-1 grid-cols-6 text-center">{scoresCake.map((s: any) => <span key={s.name} className="text-slate-600">{s.title}{s.name}</span>)}</div></div>
@@ -331,20 +339,27 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <Link href="/assessments/reports"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /> 返回列表</Button></Link>
-        <div className="flex gap-2">
-          <Link href={`/assessments/reports/${sessionId}`}><Button variant="outline" size="sm">复核作答</Button></Link>
-          <Button size="sm" onClick={downloadPdf} disabled={downloading || !pages.length}>
-            {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} 下载 PDF
-          </Button>
-        </div>
+      {/* 工具栏: 公开模式只留下载, sticky 方便长页面操作 */}
+      <div className="sticky top-2 z-10 mx-auto flex w-fit items-center gap-2 rounded-full border bg-white/90 px-3 py-1.5 shadow backdrop-blur">
+        {mode === "admin" && (
+          <>
+            <Link href="/assessments/reports"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /> 返回列表</Button></Link>
+            <Button variant="outline" size="sm" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/report/${sessionId}`); toast.success("公开预览链接已复制 (免登录可直接打开)"); }}>
+              <LinkIcon className="h-4 w-4" /> 公开链接
+            </Button>
+          </>
+        )}
+        <Button size="sm" onClick={downloadPdf} disabled={downloading || !pages.length}>
+          {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} 下载 PDF
+        </Button>
       </div>
 
-      {/* 离屏测量 */}
-      <div ref={measureRef} aria-hidden style={{ position: "absolute", left: -99999, top: 0, width: CONTENT_W }} className="text-[13px] text-slate-700">
-        {blocks.map((b, i) => <div key={i} style={{ marginBottom: 10 }}>{b}</div>)}
-      </div>
+      {/* 离屏测量 (图表用占位, 不初始化 echarts) */}
+      <MeasuringCtx.Provider value={true}>
+        <div ref={measureRef} aria-hidden style={{ position: "absolute", left: -99999, top: 0, width: CONTENT_W }} className="text-[13px] text-slate-700">
+          {blocks.map((b, i) => <div key={i} style={{ marginBottom: 10 }}>{b}</div>)}
+        </div>
+      </MeasuringCtx.Provider>
 
       {/* A4 分页 */}
       <div id="report-root" className="mx-auto flex w-fit flex-col items-center gap-5">

@@ -1,14 +1,20 @@
 "use client";
 import { useEffect, useRef } from "react";
-import * as echarts from "echarts";
+import * as echarts from "echarts/core";
+import { PieChart, BarChart, RadarChart } from "echarts/charts";
+import { LegendComponent, TooltipComponent, GridComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
 
-/** echarts 轻封装; canvas 渲染 (与旧系统一致, html2canvas 可导出 PDF) */
+// 按需引入, 大幅减小打包体积
+echarts.use([PieChart, BarChart, RadarChart, LegendComponent, TooltipComponent, GridComponent, CanvasRenderer]);
+
+/** echarts 轻封装; canvas 渲染 (html2canvas 可导出 PDF) */
 export function EChart({
   option,
   className,
   style,
 }: {
-  option: echarts.EChartsCoreOption;
+  option: any;
   className?: string;
   style?: React.CSSProperties;
 }) {

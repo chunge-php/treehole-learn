@@ -166,9 +166,9 @@ export function ReportView({ report, sessionId, mode = "admin" }: { report: any;
 
   push(<SecTitle n="二" title="综合结论与类型界定" />);
   push(
-    <div className="flex items-center gap-3 py-1">
-      <span className="text-slate-600">经过测评您在八维学格类型中属于：</span>
-      <span className="rounded px-2 text-2xl font-extrabold" style={{ color: ORANGE, background: ORANGE + "1f" }}>{report.value3?.title || ""}</span>
+    <div className="flex items-baseline gap-2 whitespace-nowrap py-1">
+      <span className="shrink-0 text-slate-600">经过测评您在八维学格类型中属于：</span>
+      <span className="shrink-0 rounded px-2 text-2xl font-extrabold leading-tight" style={{ color: ORANGE, background: ORANGE + "1f" }}>{report.value3?.title || ""}</span>
     </div>
   );
   push(

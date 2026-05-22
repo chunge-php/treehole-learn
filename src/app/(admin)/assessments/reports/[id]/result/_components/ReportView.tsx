@@ -357,7 +357,7 @@ export function ReportView({ report, sessionId }: { report: any; sessionId: stri
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/report/logo.png" alt="发展猫" className="absolute left-12 top-10 h-9 object-contain" onError={(e: any) => { e.target.style.display = "none"; }} />
           <div className="relative flex h-full flex-col items-center px-16 pt-[36%] text-center">
-            <h1 className="text-[34px] font-bold leading-snug text-slate-800">《个性化学习与<br />发展评估报告》</h1>
+            <h1 className="whitespace-nowrap text-[30px] font-bold leading-snug text-slate-800">《个性化学习与发展评估报告》</h1>
             <div className="my-5 h-1 w-16 rounded bg-primary" />
             <div className="text-xl font-bold text-slate-700">个人报告</div>
             <div className="mt-20 space-y-4 text-[15px]">

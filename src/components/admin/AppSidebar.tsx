@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Building2, Store, Users, ClipboardList, BookOpen,
-  Settings2, ReceiptText, Leaf, ShieldCheck, ChevronRight, FileText
+  Settings2, ReceiptText, Leaf, ShieldCheck, ChevronRight, FileText, MessageSquare
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +32,10 @@ const groups: Group[] = [
   },
   {
     title: "经营",
-    items: [{ href: "/orders", label: "订单", icon: ReceiptText }]
+    items: [
+      { href: "/orders", label: "订单", icon: ReceiptText },
+      { href: "/feedback", label: "用户反馈", icon: MessageSquare, adminOnly: true }
+    ]
   },
   {
     title: "管理",

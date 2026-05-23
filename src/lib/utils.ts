@@ -38,8 +38,3 @@ export function formatMoney(n: number | null | undefined) {
   if (n === null || n === undefined) return "¥0.00";
   return `¥${Number(n).toFixed(2)}`;
 }
-
-export function maskPhone(p?: string | null) {
-  if (!p) return "—";
-  return p.replace(/(\d{3})\d{4}(\d{4})/, "$1****$2");
-}

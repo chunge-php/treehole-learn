@@ -10,7 +10,7 @@ import { DataToolbar } from "@/components/admin/DataToolbar";
 import { Pagination } from "@/components/admin/Pagination";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
-import { formatDateCN } from "@/lib/utils";
+import { formatDateCN, maskPhone } from "@/lib/utils";
 import { MoreHorizontal, Pencil, Trash2, Users, ClipboardList } from "lucide-react";
 import { AssignmentsDialog } from "./AssignmentsDialog";
 import {
@@ -198,7 +198,7 @@ export function EndUsersClient({
                 <TableHead>渠道</TableHead>
                 <TableHead>登录账号</TableHead>
                 <TableHead>关联手机号</TableHead>
-                <TableHead>家长</TableHead>
+                <TableHead>家长端绑定用户</TableHead>
                 <TableHead>本周待办</TableHead>
                 <TableHead>注册时间</TableHead>
                 <TableHead>最近登录</TableHead>
@@ -224,7 +224,7 @@ export function EndUsersClient({
                     )}
                   </TableCell>
                   <TableCell className="text-sm font-mono text-xs">
-                    {r.phone || <span className="text-muted-foreground">—</span>}
+                    {r.phone ? maskPhone(r.phone) : <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell className="text-xs">
                     {r._parent_nickname

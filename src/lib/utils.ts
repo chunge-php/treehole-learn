@@ -26,6 +26,14 @@ export function formatDateCN(d: string | Date | null | undefined) {
   return `${y}-${m}-${day} ${hh}:${mm}`;
 }
 
+/** 手机号脱敏: 137******4521 (前3后4, 中间6个星) */
+export function maskPhone(phone: string | null | undefined) {
+  const p = String(phone || "").trim();
+  if (!p) return "";
+  if (p.length < 7) return p;
+  return `${p.slice(0, 3)}******${p.slice(-4)}`;
+}
+
 export function formatMoney(n: number | null | undefined) {
   if (n === null || n === undefined) return "¥0.00";
   return `¥${Number(n).toFixed(2)}`;

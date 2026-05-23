@@ -66,7 +66,7 @@ export function Client({ initialRows }: { initialRows: FeedbackRow[] }) {
             <div className="flex items-start gap-3">
               <Avatar className="h-10 w-10 shrink-0">
                 {f.parentAvatar && <AvatarImage src={f.parentAvatar} alt="" />}
-                <AvatarFallback>{(f.parentNickname || "家").slice(0, 1)}</AvatarFallback>
+                <AvatarFallback className="bg-gradient-to-br from-sky-300 to-blue-500 text-white font-semibold">{(f.parentNickname || "家").slice(0, 1)}</AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">

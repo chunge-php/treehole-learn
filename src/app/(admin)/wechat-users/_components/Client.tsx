@@ -80,7 +80,7 @@ export function Client({ initialRows }: { initialRows: MpParentRow[] }) {
                   <div className="flex items-center gap-2.5">
                     <Avatar className="h-8 w-8">
                       {p.avatar && <AvatarImage src={p.avatar} alt="" />}
-                      <AvatarFallback>{(p.nickname || "家").slice(0, 1)}</AvatarFallback>
+                      <AvatarFallback className="bg-gradient-to-br from-sky-300 to-blue-500 text-white text-xs font-semibold">{(p.nickname || "家").slice(0, 1)}</AvatarFallback>
                     </Avatar>
                     <span className="text-sm font-medium">{p.nickname || <span className="text-muted-foreground">未设昵称</span>}</span>
                   </div>

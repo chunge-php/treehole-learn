@@ -65,7 +65,7 @@ export async function listEndUsers(params: { q?: string; store_id?: string | nul
     const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
     const [parentsRes, tasksRes] = await Promise.all([
-      sb.from("parent_bindings").select("end_user_id, nickname").in("end_user_id", ids).order("created_at", { ascending: false }),
+      sb.from("parent_bindings").select("end_user_id, nickname, mp_parents(nickname, phone)").in("end_user_id", ids).order("created_at", { ascending: false }),
       sb.from("assignments").select("end_user_id")
         .in("end_user_id", ids)
         .is("completed_at", null)
@@ -73,11 +73,18 @@ export async function listEndUsers(params: { q?: string; store_id?: string | nul
         .gte("end_date", fmt(monday))
     ]);
     const parentMap: Record<string, string> = {};
-    (parentsRes.data || []).forEach((p: any) => { if (!parentMap[p.end_user_id]) parentMap[p.end_user_id] = p.nickname; });
+    const parentPhoneMap: Record<string, string> = {};
+    (parentsRes.data || []).forEach((p: any) => {
+      // 优先取绑定家长(mp_parents)的微信昵称, 回退旧 nickname 字段
+      const nick = p.mp_parents?.nickname || p.nickname;
+      if (nick && !parentMap[p.end_user_id]) parentMap[p.end_user_id] = nick;
+      if (p.mp_parents?.phone && !parentPhoneMap[p.end_user_id]) parentPhoneMap[p.end_user_id] = p.mp_parents.phone;
+    });
     const taskMap: Record<string, number> = {};
     (tasksRes.data || []).forEach((t: any) => { taskMap[t.end_user_id] = (taskMap[t.end_user_id] || 0) + 1; });
     rows.forEach((r: any) => {
       r._parent_nickname = parentMap[r.id] || null;
+      r._parent_phone = parentPhoneMap[r.id] || null;
       r._pending_tasks = taskMap[r.id] || 0;
     });
   }

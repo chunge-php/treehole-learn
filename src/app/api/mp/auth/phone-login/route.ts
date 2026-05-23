@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { code2Session, getPhoneNumber } from "@/lib/wechat";
 import { findOrCreateByOpenId, setParentPhone, touchLogin, loginResult } from "@/lib/mp-parents";
+import { autoBindByPhone } from "@/lib/mp-bindings";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export async function POST(req: Request) {
 
     const parent = await findOrCreateByOpenId(openid, { union_id: unionid });
     await setParentPhone(parent.id, phone);
+    await autoBindByPhone(parent.id, phone);
     await touchLogin(parent.id);
     return NextResponse.json(loginResult({ ...parent, phone }));
   } catch (e: any) {

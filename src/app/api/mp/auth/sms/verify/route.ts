@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { code2Session } from "@/lib/wechat";
 import { findOrCreateByPhone, touchLogin, loginResult } from "@/lib/mp-parents";
+import { autoBindByPhone } from "@/lib/mp-bindings";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,7 @@ export async function POST(req: Request) {
     }
 
     const parent = await findOrCreateByPhone(phone, openid);
+    await autoBindByPhone(parent.id, phone);
     await touchLogin(parent.id);
     return NextResponse.json(loginResult(parent));
   } catch (e: any) {

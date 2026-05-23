@@ -15,11 +15,16 @@ export type Code2SessionResult = {
   session_key: string | null;
 };
 
-/** 用 wx.login 的 code 换取 openid。无 key 时按 code 生成稳定 mock openid。 */
-export async function code2Session(jsCode: string): Promise<Code2SessionResult> {
+/**
+ * 用 wx.login 的 code 换取 openid。
+ * mock 模式: 用 mockSeed(前端稳定设备id)生成固定 openid; 没传才退化用 jsCode。
+ * ⚠️ jsCode 每次登录都变, 不能直接当 mock openid 种子(否则每次都是新账号)。
+ */
+export async function code2Session(jsCode: string, mockSeed?: string | null): Promise<Code2SessionResult> {
   if (!jsCode) throw new Error("缺少登录 code");
   if (WECHAT_MOCK) {
-    const h = createHash("sha1").update(jsCode).digest("hex").slice(0, 24);
+    const seed = (mockSeed && String(mockSeed).trim()) || jsCode;
+    const h = createHash("sha1").update(seed).digest("hex").slice(0, 24);
     return { openid: `mock_openid_${h}`, unionid: null, session_key: null };
   }
   const url =

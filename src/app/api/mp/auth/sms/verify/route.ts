@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     const loginCode = String(body?.loginCode || "").trim();
     if (loginCode) {
       try {
-        openid = (await code2Session(loginCode)).openid;
+        openid = (await code2Session(loginCode, body?.mockId)).openid;
       } catch {
         openid = null; // openid 关联失败不阻断短信登录
       }

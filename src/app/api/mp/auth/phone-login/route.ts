@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     if (!loginCode) return NextResponse.json({ ok: false, error: "缺少 loginCode" }, { status: 400 });
     if (!phoneCode) return NextResponse.json({ ok: false, error: "缺少 phoneCode" }, { status: 400 });
 
-    const { openid, unionid } = await code2Session(loginCode);
+    const { openid, unionid } = await code2Session(loginCode, body?.mockId);
     const phone = await getPhoneNumber(phoneCode);
 
     const parent = await findOrCreateByOpenId(openid, { union_id: unionid });

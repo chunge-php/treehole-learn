@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     const code = String(body?.code || "").trim();
     if (!code) return NextResponse.json({ ok: false, error: "缺少登录 code" }, { status: 400 });
 
-    const { openid, unionid } = await code2Session(code);
+    const { openid, unionid } = await code2Session(code, body?.mockId);
     const parent = await findOrCreateByOpenId(openid, {
       union_id: unionid,
       nickname: body?.nickname ? String(body.nickname) : null,

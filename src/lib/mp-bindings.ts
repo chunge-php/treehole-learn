@@ -72,6 +72,28 @@ export async function unbind(parentId: string, endUserId: string): Promise<{ ok:
   return { ok: true };
 }
 
+/** 解析家长当前要操作的学生: 指定 endUserId 则校验归属, 否则取最早绑定的那个 */
+export async function resolveChild(
+  parentId: string,
+  endUserId?: string | null
+): Promise<{ id: string; name: string; channel_id: string | null; store_id: string | null } | null> {
+  const sb = adminSupabase();
+  let q = sb
+    .from("parent_bindings")
+    .select("end_user_id, end_users(name, channel_id, store_id)")
+    .eq("parent_id", parentId);
+  if (endUserId) q = q.eq("end_user_id", endUserId);
+  const { data } = await q.order("created_at", { ascending: true }).limit(1).maybeSingle();
+  if (!data) return null;
+  const eu = (data as any).end_users || {};
+  return {
+    id: (data as any).end_user_id,
+    name: eu.name || "",
+    channel_id: eu.channel_id || null,
+    store_id: eu.store_id || null
+  };
+}
+
 /** 列出该家长名下已绑定的学生 */
 export async function listBoundStudents(parentId: string) {
   const sb = adminSupabase();

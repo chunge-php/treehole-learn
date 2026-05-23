@@ -24,6 +24,7 @@ type Assignment = {
   start_date: string;
   end_date: string;
   completed_at: string | null;
+  source?: "admin" | "parent";
 };
 
 type Filter = "all" | "pending" | "done";
@@ -282,6 +283,12 @@ export function AssignmentsDialog({
                         <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
                           <CalendarRange className="h-3 w-3" />
                           {a.start_date} ~ {a.end_date}
+                          <Badge
+                            variant="outline"
+                            className={"ml-1 text-[10px] " + (a.source === "parent" ? "border-primary/40 text-primary" : "border-muted-foreground/30 text-muted-foreground")}
+                          >
+                            {a.source === "parent" ? "家长添加" : "后台添加"}
+                          </Badge>
                           {done && a.completed_at && (
                             <Badge variant="outline" className="ml-2 text-[10px] border-success/40 text-success">
                               {formatDateCN(a.completed_at)} 完成

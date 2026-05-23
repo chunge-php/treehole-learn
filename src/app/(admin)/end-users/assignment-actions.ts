@@ -65,7 +65,8 @@ export async function createAssignment(input: AssignmentInput) {
     store_id: user.store_id,
     name: input.name.trim(),
     start_date: input.start_date,
-    end_date: input.end_date
+    end_date: input.end_date,
+    source: "admin"
   });
   if (error) throw new Error(error.message);
   revalidatePath("/end-users");

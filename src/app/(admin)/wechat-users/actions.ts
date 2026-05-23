@@ -51,3 +51,13 @@ export async function adminUnbind(parentId: string, endUserId: string) {
   revalidatePath("/wechat-users");
   return { ok: true };
 }
+
+/** 删除微信用户 (绑定关系随之级联清除; 反馈记录保留但 parent 置空) */
+export async function deleteMpParent(id: string) {
+  requireAdmin();
+  const sb = adminSupabase();
+  const { error } = await sb.from("mp_parents").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/wechat-users");
+  return { ok: true };
+}

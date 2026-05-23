@@ -4,16 +4,33 @@ import { toast } from "sonner";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/admin/EmptyState";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
-import { Smartphone, X } from "lucide-react";
+import { Smartphone, X, Trash2 } from "lucide-react";
 import { formatDateCN, maskPhone } from "@/lib/utils";
-import { listMpParents, adminUnbind, type MpParentRow } from "../actions";
+import { listMpParents, adminUnbind, deleteMpParent, type MpParentRow } from "../actions";
 
 export function Client({ initialRows }: { initialRows: MpParentRow[] }) {
   const [rows, setRows] = useState(initialRows);
   const [unbindTarget, setUnbindTarget] = useState<{ parentId: string; endUserId: string; name: string; nickname: string } | null>(null);
+  const [delTarget, setDelTarget] = useState<MpParentRow | null>(null);
   const [, startMutate] = useTransition();
+
+  function onConfirmDelete() {
+    if (!delTarget) return;
+    const id = delTarget.id;
+    setDelTarget(null);
+    startMutate(async () => {
+      try {
+        await deleteMpParent(id);
+        toast.success("已删除");
+        refresh();
+      } catch (e: any) {
+        toast.error(e?.message || "删除失败");
+      }
+    });
+  }
 
   async function refresh() {
     try {
@@ -53,6 +70,7 @@ export function Client({ initialRows }: { initialRows: MpParentRow[] }) {
               <TableHead>绑定学员</TableHead>
               <TableHead>最近登录</TableHead>
               <TableHead>注册时间</TableHead>
+              <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -94,6 +112,16 @@ export function Client({ initialRows }: { initialRows: MpParentRow[] }) {
                   {p.lastLoginAt ? formatDateCN(p.lastLoginAt) : <span className="opacity-60">从未登录</span>}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{formatDateCN(p.createdAt)}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground/60 hover:text-destructive"
+                    onClick={() => setDelTarget(p)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -108,6 +136,16 @@ export function Client({ initialRows }: { initialRows: MpParentRow[] }) {
         confirmText="解绑"
         destructive
         onConfirm={onConfirmUnbind}
+      />
+
+      <ConfirmDialog
+        open={!!delTarget}
+        onOpenChange={v => !v && setDelTarget(null)}
+        title="删除微信用户"
+        description={`确定删除「${delTarget?.nickname || "该用户"}」吗？删除后其登录账号与绑定关系将一并清除（提交的反馈会保留）。`}
+        confirmText="删除"
+        destructive
+        onConfirm={onConfirmDelete}
       />
     </>
   );

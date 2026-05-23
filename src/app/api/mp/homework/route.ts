@@ -38,6 +38,7 @@ export async function GET(req: Request) {
       id: a.id,
       title: a.name,
       from: sourceText(a.source),
+      source: a.source,
       done: !!a.completed_at,
       startDate: a.start_date,
       endDate: a.end_date

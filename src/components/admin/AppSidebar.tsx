@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Building2, Store, Users, ClipboardList, BookOpen,
-  Settings2, ReceiptText, Leaf, ShieldCheck, ChevronRight
+  Settings2, ReceiptText, Leaf, ShieldCheck, ChevronRight, FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +39,7 @@ const groups: Group[] = [
     items: [
       { href: "/settings/channel-levels", label: "渠道级别", icon: ShieldCheck, adminOnly: true },
       { href: "/settings/top-types", label: "顶级类型", icon: Settings2, adminOnly: true },
+      { href: "/settings/agreements", label: "协议管理", icon: FileText, adminOnly: true },
       { href: "/settings/accounts", label: "账号管理", icon: Users, adminOnly: true }
     ]
   }

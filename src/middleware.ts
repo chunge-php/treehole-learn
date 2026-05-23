@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // 渠道商不能进 /admin-only 区域
-  const adminOnly = ["/settings", "/accounts", "/feedback"];
+  const adminOnly = ["/settings", "/accounts", "/feedback", "/wechat-users"];
   if (session.role === "channel_admin" && adminOnly.some(p => path.startsWith(p))) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";

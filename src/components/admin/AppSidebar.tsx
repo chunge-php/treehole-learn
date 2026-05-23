@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Building2, Store, Users, ClipboardList, BookOpen,
-  Settings2, ReceiptText, Leaf, ShieldCheck, ChevronRight, FileText, MessageSquare
+  Settings2, ReceiptText, Leaf, ShieldCheck, ChevronRight, FileText, MessageSquare, Smartphone
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +20,8 @@ const groups: Group[] = [
     items: [
       { href: "/channels", label: "渠道商", icon: Building2, adminOnly: true },
       { href: "/stores", label: "店铺", icon: Store },
-      { href: "/end-users", label: "用户管理", icon: Users }
+      { href: "/end-users", label: "用户管理", icon: Users },
+      { href: "/wechat-users", label: "微信用户", icon: Smartphone, adminOnly: true }
     ]
   },
   {

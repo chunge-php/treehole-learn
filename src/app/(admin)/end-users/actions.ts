@@ -230,6 +230,13 @@ export async function bulkImportEndUsers(rows: Record<string, any>[]) {
   const storeMap = new Map<string, { id: string; channel_id: string }>();
   (stores || []).forEach((st: any) => storeMap.set(String(st.name).trim(), { id: st.id, channel_id: st.channel_id }));
 
+  // 渠道商名称 → id (用于只填渠道商、不填店铺的场景)
+  let channelQb = sb.from("channels").select("id, name");
+  if (scope && scope !== "__none__") channelQb = channelQb.eq("id", scope);
+  const { data: channels = [] } = await channelQb;
+  const channelMap = new Map<string, string>();
+  (channels || []).forEach((c: any) => channelMap.set(String(c.name).trim(), c.id));
+
   // 已有 login_username 集合
   const { data: existingUsers = [] } = await sb.from("end_users").select("login_username").not("login_username", "is", null);
   const usernameSet = new Set((existingUsers || []).map((u: any) => u.login_username));
@@ -246,17 +253,30 @@ export async function bulkImportEndUsers(rows: Record<string, any>[]) {
       continue;
     }
     const storeName = String(r["所属店铺名称"] || r["store_name"] || "").trim();
+    const channelName = String(r["所属渠道商名称"] || r["channel_name"] || "").trim();
     let store: { id: string; channel_id: string } | null = null;
+    let channel_id: string | null = null;
     if (storeName) {
+      // 填了店铺: 按店铺归属(渠道随店铺)
       store = storeMap.get(storeName) || null;
       if (!store) {
         errors.push({ row: i + 2, message: `店铺「${storeName}」不存在或无权操作` });
         continue;
       }
+      channel_id = store.channel_id;
+    } else if (channelName) {
+      // 只填渠道商: 直接归属渠道商, 不关联店铺
+      const cid = channelMap.get(channelName);
+      if (!cid) {
+        errors.push({ row: i + 2, message: `渠道商「${channelName}」不存在或无权操作` });
+        continue;
+      }
+      channel_id = cid;
     } else if (s.role === "channel_admin") {
-      errors.push({ row: i + 2, message: "所属店铺名称为空" });
-      continue;
+      // 渠道商账号留空: 默认归属自己的渠道
+      channel_id = s.channel_id || null;
     }
+    // 平台管理员留空: store/channel 均为空(暂不关联)
 
     const username = String(r["登录账号"] || r["login_username"] || "").trim() || null;
     const password = String(r["登录密码"] || r["login_password"] || "").trim() || null;
@@ -280,7 +300,7 @@ export async function bulkImportEndUsers(rows: Record<string, any>[]) {
     const { error } = await sb.from("end_users").insert({
       id: shortId("eu"),
       store_id: store?.id || null,
-      channel_id: store?.channel_id || null,
+      channel_id,
       name,
       phone: r["手机号"] || r["关联手机号"] || r["电话"] || r["phone"] || null,
       login_username: username,

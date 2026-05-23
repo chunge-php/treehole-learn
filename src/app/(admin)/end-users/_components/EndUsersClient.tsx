@@ -117,7 +117,7 @@ export function EndUsersClient({
       注册时间: formatDateCN(r.created_at),
       最近登录: r.last_login_at ? formatDateCN(r.last_login_at) : "从未登录"
     }));
-    downloadExcel(data, `普通用户导出_${new Date().getTime()}.xlsx`);
+    downloadExcel(data, `用户导出_${new Date().getTime()}.xlsx`);
     toast.success("已导出当前页数据");
   }
 
@@ -290,7 +290,7 @@ export function EndUsersClient({
       <ConfirmDialog
         open={!!delTarget}
         onOpenChange={v => !v && setDelTarget(null)}
-        title="删除普通用户"
+        title="删除用户"
         description={`确定要删除「${delTarget?.name}」吗？该用户的所有测评记录、订单也将一并删除。`}
         confirmText="确认删除"
         destructive

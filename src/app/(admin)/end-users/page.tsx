@@ -22,7 +22,7 @@ export default async function EndUsersPage({
   return (
     <div>
       <PageHeader
-        title="普通用户"
+        title="用户管理"
         description="管理店铺旗下的终端学员，含登录凭证与关联手机号"
       />
       <EndUsersClient

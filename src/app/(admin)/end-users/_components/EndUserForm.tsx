@@ -155,9 +155,9 @@ export function EndUserForm({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "编辑普通用户" : "新增普通用户"}</DialogTitle>
+          <DialogTitle>{isEdit ? "编辑用户" : "新增用户"}</DialogTitle>
           <DialogDescription>
-            创建后该账号可登录小程序 / 平板端做测评。一个普通用户 = 一个学员档案 + 登录凭证。
+            创建后该账号可登录小程序 / 平板端做测评。一个用户 = 一个学员档案 + 登录凭证。
           </DialogDescription>
         </DialogHeader>
 

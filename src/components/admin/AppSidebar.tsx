@@ -20,7 +20,7 @@ const groups: Group[] = [
     items: [
       { href: "/channels", label: "渠道商", icon: Building2, adminOnly: true },
       { href: "/stores", label: "店铺", icon: Store },
-      { href: "/end-users", label: "普通用户", icon: Users }
+      { href: "/end-users", label: "用户管理", icon: Users }
     ]
   },
   {

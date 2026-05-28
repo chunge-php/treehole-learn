@@ -313,6 +313,52 @@ export async function generateSessionReport(sessionId: string) {
   return r.report;
 }
 
+/** 手动重新跑一次档案同步 (测评报告 → user_profiles), 返回更新字段路径 */
+export async function resyncReportToProfile(sessionId: string): Promise<{
+  ok: boolean;
+  end_user_id: string | null;
+  fields_in_report: string[];
+  message: string;
+}> {
+  const s = requireAdmin();
+  const sb = adminSupabase();
+  const { data: sess } = await sb.from("report_sessions")
+    .select("end_user_id, status, report_data, name")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (!sess) return { ok: false, end_user_id: null, fields_in_report: [], message: "记录不存在" };
+  if (!sess.end_user_id) return { ok: false, end_user_id: null, fields_in_report: [], message: "该记录未关联学生 (旧数据), 删除重建并选学生" };
+  if (sess.status !== "completed") return { ok: false, end_user_id: sess.end_user_id, fields_in_report: [], message: "报告尚未完成, 无法同步" };
+
+  // 没有 report_data 就重新 build
+  let reportData = sess.report_data;
+  if (!reportData) {
+    const r = await buildReportForSession(sessionId);
+    if (!r?.report) return { ok: false, end_user_id: sess.end_user_id, fields_in_report: [], message: "无法构建报告 (答案不全?)" };
+    reportData = r.report;
+    await sb.from("report_sessions").update({ report_data: reportData }).eq("id", sessionId);
+  }
+
+  const present: string[] = [];
+  if ((reportData as any)?.value1?.title) present.push("value1 学生类型");
+  if ((reportData as any)?.value3?.title) present.push("value3 八格类型");
+  if ((reportData as any)?.value4) present.push("value4 焦虑等级");
+  if (Array.isArray((reportData as any)?.value5)) present.push("value5 焦虑分数");
+  if ((reportData as any)?.value8) present.push("value8 兴趣六型");
+
+  try {
+    await updateProfileFromReport({
+      end_user_id: sess.end_user_id,
+      report_data: reportData,
+      session_id: sessionId,
+      by: s.account_id
+    });
+    return { ok: true, end_user_id: sess.end_user_id, fields_in_report: present, message: `已同步 ${present.length} 个字段到学生档案` };
+  } catch (e: any) {
+    return { ok: false, end_user_id: sess.end_user_id, fields_in_report: present, message: `同步失败: ${e?.message || String(e)}` };
+  }
+}
+
 export async function deleteReportSession(id: string) {
   requireAdmin();
   const sb = adminSupabase();

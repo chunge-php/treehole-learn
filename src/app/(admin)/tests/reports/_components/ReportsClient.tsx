@@ -12,8 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
-import { ArrowLeft, Plus, FileBarChart, Trash2, Pencil, Eye, Loader2 } from "lucide-react";
-import { createReportSession, deleteReportSession, listEndUsersForSelect, type ReportSessionRow } from "../actions";
+import { ArrowLeft, Plus, FileBarChart, Trash2, Pencil, Eye, Loader2, RefreshCw } from "lucide-react";
+import { createReportSession, deleteReportSession, listEndUsersForSelect, resyncReportToProfile, type ReportSessionRow } from "../actions";
 import { toast } from "sonner";
 
 type EndUserOpt = { id: string; name: string; phone: string; grade: string; store?: string; channel?: string };
@@ -28,6 +28,17 @@ export function ReportsClient({ initialRows }: { initialRows: ReportSessionRow[]
   const [pending, start] = useTransition();
   const [delTarget, setDelTarget] = useState<ReportSessionRow | null>(null);
   const [delPending, startDel] = useTransition();
+  const [resyncingId, setResyncingId] = useState<string | null>(null);
+
+  async function onResync(id: string) {
+    setResyncingId(id);
+    try {
+      const r = await resyncReportToProfile(id);
+      if (r.ok) toast.success(r.message + (r.fields_in_report.length ? ` · 包含: ${r.fields_in_report.join(", ")}` : ""));
+      else toast.error(r.message);
+    } catch (e: any) { toast.error(e?.message || "同步失败"); }
+    finally { setResyncingId(null); }
+  }
 
   useEffect(() => {
     if (createOpen && endUsers.length === 0) {
@@ -128,6 +139,9 @@ export function ReportsClient({ initialRows }: { initialRows: ReportSessionRow[]
                             <Link href={`/tests/reports/${r.id}/result`}>
                               <Button variant="outline" size="sm"><Eye className="h-3.5 w-3.5" /> 查看报告</Button>
                             </Link>
+                            <Button variant="ghost" size="sm" disabled={resyncingId === r.id} onClick={() => onResync(r.id)} title="重新把报告结果同步到学生档案">
+                              {resyncingId === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} 同步档案
+                            </Button>
                             <Link href={`/tests/reports/${r.id}`}>
                               <Button variant="ghost" size="sm"><Pencil className="h-3.5 w-3.5" /> 复核</Button>
                             </Link>

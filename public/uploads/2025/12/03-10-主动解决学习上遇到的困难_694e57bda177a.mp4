@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, viewport-fit=cover, user-scalable=no"
+    />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <title>智慧心理综合服务云平台</title>
+    <script type="module" crossorigin src="/assets/index-Dm3Vsw4a.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-ZEX8HlU4.css">
+  <link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script></head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>

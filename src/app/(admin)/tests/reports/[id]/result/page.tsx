@@ -9,7 +9,7 @@ export default async function ReportResultPage({ params }: { params: { id: strin
   if (!detail) notFound();
   // 未答完不能查看报告
   if (detail.session.status !== "completed") {
-    redirect(`/assessments/reports/${params.id}`);
+    redirect(`/tests/reports/${params.id}`);
   }
   const report = await generateSessionReport(params.id);
   if (!report) notFound();

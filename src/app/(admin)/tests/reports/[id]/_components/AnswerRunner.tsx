@@ -107,7 +107,7 @@ export function AnswerRunner({
       <Card className="p-8 text-center text-muted-foreground">
         该记录没有可作答的题目 (题库可能已清空)。
         <div className="mt-4">
-          <Link href="/assessments/reports"><Button variant="outline"><ArrowLeft className="h-4 w-4" /> 返回列表</Button></Link>
+          <Link href="/tests/reports"><Button variant="outline"><ArrowLeft className="h-4 w-4" /> 返回列表</Button></Link>
         </div>
       </Card>
     );
@@ -118,7 +118,7 @@ export function AnswerRunner({
       {/* 顶部: 返回 + 名称 + 进度 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Link href="/assessments/reports">
+          <Link href="/tests/reports">
             <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /> 返回列表</Button>
           </Link>
           <span className="font-medium">{sessionName}</span>
@@ -133,7 +133,7 @@ export function AnswerRunner({
             </Button>
           )}
           {completed ? (
-            <Link href={`/assessments/reports/${sessionId}/result`}>
+            <Link href={`/tests/reports/${sessionId}/result`}>
               <Button size="sm"><FileBarChart className="h-3.5 w-3.5" /> 查看报告</Button>
             </Link>
           ) : (

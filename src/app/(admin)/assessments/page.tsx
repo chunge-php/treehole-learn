@@ -23,7 +23,7 @@ export default async function AssessmentsPage({ searchParams }: { searchParams: 
         title="测评题库"
         description="维护测评题, 含 4 大维度与 3 种题型 (单选 / 判断 / 语音), 支持上传题目图片与视频"
         actions={canReports ? (
-          <Link href="/assessments/reports">
+          <Link href="/tests/reports">
             <Button variant="outline"><FileBarChart className="h-4 w-4" /> 测评报告</Button>
           </Link>
         ) : undefined}

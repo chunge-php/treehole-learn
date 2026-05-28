@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Building2, Store, Users, ClipboardList, BookOpen,
   Settings2, ReceiptText, Leaf, ShieldCheck, ChevronRight, FileText, MessageSquare, Smartphone,
-  FlaskConical, Sparkles
+  FlaskConical, Sparkles, FileBarChart
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +42,7 @@ const groups: Group[] = [
   {
     title: "测试中心",
     items: [
+      { href: "/tests/reports", label: "测评报告", icon: FileBarChart, adminOnly: true },
       { href: "/tests/multimodal", label: "多模态测试", icon: FlaskConical, adminOnly: true },
       { href: "/tests/prompt-templates", label: "提示词模板", icon: Sparkles, adminOnly: true }
     ]

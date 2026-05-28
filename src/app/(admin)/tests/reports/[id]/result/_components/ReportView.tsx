@@ -366,7 +366,7 @@ export function ReportView({ report, sessionId, mode = "admin" }: { report: any;
       <div className="sticky top-2 z-10 mx-auto flex w-fit items-center gap-2 rounded-full border bg-white/90 px-3 py-1.5 shadow backdrop-blur">
         {mode === "admin" && (
           <>
-            <Link href="/assessments/reports"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /> 返回列表</Button></Link>
+            <Link href="/tests/reports"><Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /> 返回列表</Button></Link>
             <Button variant="outline" size="sm" onClick={copyPublicLink}>
               <LinkIcon className="h-4 w-4" /> 公开链接
             </Button>

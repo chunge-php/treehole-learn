@@ -96,7 +96,7 @@ export async function createReportSession(input: { end_user_id: string; remark?:
   if (e2) throw new Error(e2.message);
   const code = buildSerial((created as any)?.seq_no ?? 0);
   await sb.from("report_sessions").update({ code }).eq("id", id);
-  revalidatePath("/assessments/reports");
+  revalidatePath("/tests/reports");
   return { id };
 }
 
@@ -234,7 +234,7 @@ export async function quickFillAnswers(sessionId: string) {
     updated_at: new Date().toISOString()
   }).eq("id", sessionId);
 
-  revalidatePath("/assessments/reports");
+  revalidatePath("/tests/reports");
   return { answers: answerMap, answered, total, completed, filled: toInsert.length };
 }
 
@@ -305,6 +305,6 @@ export async function deleteReportSession(id: string) {
   const sb = adminSupabase();
   const { error } = await sb.from("report_sessions").delete().eq("id", id);
   if (error) throw new Error(error.message);
-  revalidatePath("/assessments/reports");
+  revalidatePath("/tests/reports");
   return { ok: true };
 }

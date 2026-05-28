@@ -42,7 +42,7 @@ export function ReportsClient({ initialRows }: { initialRows: ReportSessionRow[]
         const { id } = await createReportSession({ end_user_id: endUserId, remark });
         toast.success("已创建, 开始作答");
         setCreateOpen(false); setEndUserId(""); setRemark("");
-        router.push(`/assessments/reports/${id}`);
+        router.push(`/tests/reports/${id}`);
       } catch (e: any) {
         toast.error(e?.message || "创建失败");
       }
@@ -125,15 +125,15 @@ export function ReportsClient({ initialRows }: { initialRows: ReportSessionRow[]
                       <div className="flex items-center justify-end gap-1.5">
                         {done ? (
                           <>
-                            <Link href={`/assessments/reports/${r.id}/result`}>
+                            <Link href={`/tests/reports/${r.id}/result`}>
                               <Button variant="outline" size="sm"><Eye className="h-3.5 w-3.5" /> 查看报告</Button>
                             </Link>
-                            <Link href={`/assessments/reports/${r.id}`}>
+                            <Link href={`/tests/reports/${r.id}`}>
                               <Button variant="ghost" size="sm"><Pencil className="h-3.5 w-3.5" /> 复核</Button>
                             </Link>
                           </>
                         ) : (
-                          <Link href={`/assessments/reports/${r.id}`}>
+                          <Link href={`/tests/reports/${r.id}`}>
                             <Button variant="outline" size="sm"><Pencil className="h-3.5 w-3.5" /> 继续答题</Button>
                           </Link>
                         )}

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { buildReportForSession } from "@/lib/report/build";
-import { ReportView } from "@/app/(admin)/assessments/reports/[id]/result/_components/ReportView";
+import { ReportView } from "@/app/(admin)/tests/reports/[id]/result/_components/ReportView";
 
 // 公开预览页 (免登录, 独立于后台); middleware 已放行 /report
 export const dynamic = "force-dynamic";

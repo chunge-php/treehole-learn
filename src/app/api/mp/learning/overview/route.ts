@@ -78,17 +78,18 @@ function sample13(arr: number[]): number[] {
 const CLOUD_COLORS = ["#1490ff", "#ff6a00", "#3CA272", "#73C0DE", "#FAC858", "#EE6666"];
 
 /**
- * 关键词云 — 居中向外随机扩散 (稍宽间距)
+ * 关键词云 — 居中向外扩散 + 防重叠 (字均水平)
  *   - 第 0 个最重要的词在画布正中, 字号 60
- *   - 后续按词文本 hash 决定方向 (0~2π 随机), 半径随 i 递增 + 抖动
+ *   - 后续以词文本 hash 决定起始角度, 在递增半径上找不和已放置词重叠的落点
+ *   - 一圈试 12 个方向, 不行再扩半径继续试, 最多 8 次回退
  *   - 字号 60 → 22, 越外圈字越小
- *   - rotate 角度也按 hash 抽: 多数水平小角度, 少量竖排
- *   - 同词永远落同位置同角度
+ *   - 所有词角度统一 0° (横排)
  * 画布按前端 .cloud-zone 100% × 440rpx 推算约 480 × 400
  */
 function layoutCloudWords(words: string[]): Array<{ text: string; size: number; color: string; x: number; y: number; rotate: number }> {
   const CW = 480, CH = 400;
   const CX = CW / 2, CY = CH / 2;
+  const PADDING = 6;  // 元素间距, 加 padding 后判 overlap 即可保证留白
   const hash01 = (s: string, salt = 0) => {
     let h = 2166136261 ^ salt;
     for (let i = 0; i < s.length; i++) {
@@ -97,30 +98,58 @@ function layoutCloudWords(words: string[]): Array<{ text: string; size: number; 
     }
     return ((h >>> 0) % 10000) / 10000;
   };
-  const ROTATE_POOL = [0, 0, 0, 0, 15, -15, 30, -30, 45, -45, 90, -90];
+
+  type Box = { x: number; y: number; w: number; h: number };
+  const placed: Box[] = [];
+
+  // bbox 重叠判定 (含 padding)
+  const overlaps = (a: Box, b: Box) => !(
+    a.x + a.w + PADDING <= b.x ||
+    b.x + b.w + PADDING <= a.x ||
+    a.y + a.h + PADDING <= b.y ||
+    b.y + b.h + PADDING <= a.y
+  );
+
   return words.map((text, i) => {
     const size = Math.max(22, 60 - i * 4);
     const approxW = text.length * size * 0.95;
-    let cx: number, cy: number;
-    if (i === 0) {
-      cx = CX; cy = CY;
-    } else {
-      const angle = hash01(text, 17) * Math.PI * 2;
-      const baseRadius = 50 + i * 22;                      // 基础半径 + 间距 (越大越松)
-      const radius = baseRadius * (0.85 + hash01(text, 31) * 0.3); // ± 15% 抖动
-      cx = CX + radius * Math.cos(angle);
-      cy = CY + radius * Math.sin(angle);
+    const startAngle = hash01(text, 17) * Math.PI * 2;
+    const baseRadius = i === 0 ? 0 : 50 + i * 18;
+
+    // 试 8 个半径档 × 12 个角度 = 96 个候选位置
+    const ANGLE_TRIES = 12;
+    const RADIUS_TRIES = 8;
+    let bestBox: Box | null = null;
+    let fallbackBox: Box | null = null;  // 实在挤不下用这个
+    outer:
+    for (let r = 0; r < RADIUS_TRIES; r++) {
+      const radius = baseRadius + r * 24;
+      for (let a = 0; a < ANGLE_TRIES; a++) {
+        const angle = startAngle + (a / ANGLE_TRIES) * Math.PI * 2;
+        const cx = CX + radius * Math.cos(angle);
+        const cy = CY + radius * Math.sin(angle);
+        const bx = Math.max(8, Math.min(CW - approxW - 8, cx - approxW / 2));
+        const by = Math.max(8, Math.min(CH - size - 8, cy - size / 2));
+        const box: Box = { x: bx, y: by, w: approxW, h: size };
+        if (!fallbackBox) fallbackBox = box;
+        const collision = placed.some(p => overlaps(box, p));
+        if (!collision) { bestBox = box; break outer; }
+      }
     }
-    const x = Math.max(8, Math.min(CW - approxW - 8, cx - approxW / 2));
-    const y = Math.max(8, Math.min(CH - size - 8, cy - size / 2));
-    const rotate = i === 0 ? 0 : ROTATE_POOL[Math.floor(hash01(text, 53) * ROTATE_POOL.length)];
+    const final = bestBox || fallbackBox!;
+    if (i === 0) {
+      // 中心词强制锚到正中
+      final.x = Math.round(CX - approxW / 2);
+      final.y = Math.round(CY - size / 2);
+    }
+    placed.push(final);
     return {
       text,
       size,
       color: CLOUD_COLORS[i % CLOUD_COLORS.length],
-      x: Math.round(x),
-      y: Math.round(y),
-      rotate
+      x: Math.round(final.x),
+      y: Math.round(final.y),
+      rotate: 0
     };
   });
 }

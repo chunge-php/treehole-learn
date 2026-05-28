@@ -41,13 +41,59 @@ export function WishLetterTesterClient({
 
   function run() {
     if (!studentId) { toast.error("请先选择学生"); return; }
+    setContent("");
+    setMeta({});
     startRun(async () => {
       try {
-        const r = await runLetterGeneration({ endUserId: studentId, year, month });
-        setContent(r.content);
-        setRendered(r.rendered);
-        setMeta({ mock: r.mock, debugUrl: r.debugUrl, studentName: r.studentName });
-        toast.success(r.mock ? "已用 mock 出一封 (未配置扣子)" : "扣子返回成功");
+        const res = await fetch("/api/admin/wishes/generate-stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endUserId: studentId, year, month })
+        });
+        if (!res.ok || !res.body) {
+          const t = await res.text().catch(() => "");
+          toast.error(`生成失败 [${res.status}] ${t.slice(0, 100)}`);
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        let acc = "";
+        outer:
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let idx: number;
+          while ((idx = buf.indexOf("\n\n")) >= 0) {
+            const chunk = buf.slice(0, idx);
+            buf = buf.slice(idx + 2);
+            let eventName = "";
+            let data = "";
+            for (const line of chunk.split("\n")) {
+              if (line.startsWith("event:")) eventName = line.slice(6).trim();
+              else if (line.startsWith("data:")) data += line.slice(5).trim();
+            }
+            if (!eventName) continue;
+            let payload: any = {};
+            try { payload = JSON.parse(data); } catch {}
+            if (eventName === "context") {
+              setRendered(payload.rendered || "");
+              setMeta(m => ({ ...m, studentName: payload.student_name }));
+            } else if (eventName === "delta") {
+              acc += payload.text || "";
+              setContent(acc);
+            } else if (eventName === "done") {
+              if (payload.content) { acc = payload.content; setContent(acc); }
+              setMeta(m => ({ ...m, mock: !!payload.mock, debugUrl: payload.debugUrl }));
+              toast.success(payload.mock ? "已用 mock 出一封 (未配置扣子)" : "扣子流式返回完成");
+              break outer;
+            } else if (eventName === "error") {
+              toast.error(payload.error || "流式失败");
+              break outer;
+            }
+          }
+        }
       } catch (e: any) { toast.error(e?.message || "生成失败"); }
     });
   }

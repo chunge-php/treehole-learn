@@ -12,7 +12,7 @@
  */
 import "server-only";
 import { adminSupabase } from "@/lib/supabase/admin";
-import { runWorkflow, cozeConfigured } from "@/lib/coze/client";
+import { runWorkflow, streamWorkflow, cozeConfigured, type CozeStreamEvent } from "@/lib/coze/client";
 
 export type LetterTemplate = {
   id: string;
@@ -135,6 +135,79 @@ function mockLetter(ctx: LetterContext): string {
 希望爸爸妈妈这个月能多理解一点我的压力, 不要因为兴趣就否定它. 也希望你们看到我一直在努力, 不只看最后的分数. 我清楚学习是主, 兴趣是辅, 我会继续自律, 稳步往前走.
 
 [mock] ${ctx.year}年${m}月`;
+}
+
+/** 流式版: AsyncGenerator 直接推 delta 文本块给 SSE 路由 */
+export async function* streamLetter(input: {
+  endUserId: string;
+  year: number;
+  month: number;
+}): AsyncGenerator<{ type: "context"; context: LetterContext } | { type: "delta"; text: string } | { type: "done"; content: string; mock: boolean; debugUrl?: string } | { type: "error"; message: string }> {
+  let template: LetterTemplate;
+  let context: LetterContext;
+  try {
+    template = await loadLetterTemplate();
+    context = await buildLetterContext({ endUserId: input.endUserId, year: input.year, month: input.month, template });
+  } catch (e: any) {
+    yield { type: "error", message: e?.message || "初始化失败" };
+    return;
+  }
+  yield { type: "context", context };
+
+  const workflowId = process.env.COZE_WORKFLOW_WISH_LETTER || "";
+  // mock 模式: 模拟流式吐字
+  if (!cozeConfigured() || !workflowId) {
+    const mockText = mockLetter(context);
+    let full = "";
+    for (const ch of mockText) {
+      full += ch;
+      yield { type: "delta", text: ch };
+      await new Promise(r => setTimeout(r, 18));
+    }
+    yield { type: "done", content: full, mock: true };
+    return;
+  }
+
+  let full = "";
+  let debugUrl: string | undefined;
+  try {
+    for await (const evt of streamWorkflow({
+      workflowId,
+      parameters: {
+        system_role: template.system_role,
+        student_context: context.rendered,
+        rules: template.rules,
+        year: context.year,
+        month: context.month
+      }
+    })) {
+      if (evt.type === "delta") {
+        full += evt.text;
+        yield { type: "delta", text: evt.text };
+      } else if (evt.type === "done") {
+        // 扣子 done 事件可能附最终 output
+        const out: any = evt.output;
+        if (!full && out) {
+          const final = typeof out === "string" ? out : (out.letter || out.content || out.output || "");
+          if (final) {
+            full = String(final);
+            yield { type: "delta", text: full };
+          }
+        }
+        debugUrl = (evt.raw as any)?.debug_url || debugUrl;
+      } else if (evt.type === "error") {
+        yield { type: "error", message: evt.message };
+        return;
+      }
+    }
+    if (!full.trim()) {
+      yield { type: "error", message: "扣子返回为空" };
+      return;
+    }
+    yield { type: "done", content: full.trim(), mock: false, debugUrl };
+  } catch (e: any) {
+    yield { type: "error", message: e?.message || "流式调用失败" };
+  }
 }
 
 export async function generateLetter(input: {

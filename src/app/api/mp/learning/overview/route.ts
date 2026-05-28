@@ -78,18 +78,19 @@ function sample13(arr: number[]): number[] {
 const CLOUD_COLORS = ["#1490ff", "#ff6a00", "#3CA272", "#73C0DE", "#FAC858", "#EE6666"];
 
 /**
- * 关键词云 — 居中向外随机扩散
- *   - 第 0 个最重要, 落在画布正中, 字号最大
- *   - 后续按词文本 hash 做种子, 角度 0~2π 随机, 半径随 i 递增 ± 抖动
- *   - 同词永远落同位置 (hash 稳定), 每次请求布局不变
- *   - 字号 60 → 22 渐变, 越外圈字越小
- *   - 越界裁剪到画布内
+ * 关键词云 — 居中向外的随机旋转扩散
+ *   - 第 0 个最重要的词在画布正中, 字号最大
+ *   - 后续基础角度 = i × 60° 形成肉眼可见的旋转, 再叠加 ± 50° hash 抖动避免规整
+ *   - 半径随 i 递增, 再 ± 30% hash 抖动避免同心环
+ *   - 字号 60 → 22 渐变
+ *   - 同词永远落同位置 (hash 稳定), 越界裁剪到画布内
  * 画布按前端 .cloud-zone 100% × 440rpx 推算约 480 × 400
  */
 function layoutCloudWords(words: string[]): Array<{ text: string; size: number; color: string; x: number; y: number }> {
   const CW = 480, CH = 400;
   const CX = CW / 2, CY = CH / 2;
-  // 文本 → [0,1) 稳定 hash, 当随机种子用
+  const ANGLE_STEP = (60 * Math.PI) / 180;  // 每个词转 60°, 6 个词转一圈, 旋转感明显
+  const ANGLE_JITTER = (50 * Math.PI) / 180; // ± 50° 抖动避免太规整
   const hash01 = (s: string, salt = 0) => {
     let h = 2166136261 ^ salt;
     for (let i = 0; i < s.length; i++) {
@@ -105,10 +106,9 @@ function layoutCloudWords(words: string[]): Array<{ text: string; size: number; 
     if (i === 0) {
       cx = CX; cy = CY;
     } else {
-      const angle = hash01(text, 17) * Math.PI * 2;
-      const baseRadius = 30 + i * 14;                     // 基础半径随 i 递增
-      const jitter = 0.7 + hash01(text, 31) * 0.6;        // 0.7 ~ 1.3 之间抖动避免环
-      const radius = baseRadius * jitter;
+      const angle = i * ANGLE_STEP + (hash01(text, 17) - 0.5) * 2 * ANGLE_JITTER;
+      const baseRadius = 30 + i * 14;
+      const radius = baseRadius * (0.7 + hash01(text, 31) * 0.6);
       cx = CX + radius * Math.cos(angle);
       cy = CY + radius * Math.sin(angle);
     }

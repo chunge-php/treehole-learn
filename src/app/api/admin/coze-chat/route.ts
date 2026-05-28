@@ -11,13 +11,17 @@ import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { streamWorkflow } from "@/lib/coze/client";
 import { buildSystemPrompt } from "@/app/(admin)/tests/ai-chat/actions";
+import { updateProfileFromChat } from "@/lib/profile/sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  try { requireAdmin(); }
-  catch (e: any) {
+  let adminId: string | null = null;
+  try {
+    const s = requireAdmin();
+    adminId = (s as any).account_id || null;
+  } catch (e: any) {
     return new Response(JSON.stringify({ error: e?.message || "未登录" }), {
       status: 401, headers: { "Content-Type": "application/json" }
     });
@@ -86,6 +90,15 @@ export async function POST(req: NextRequest) {
               send("delta", { text: full });
             }
             send("done", { full });
+            // fire-and-forget 回写学生档案 (失败不影响响应)
+            if (full) {
+              updateProfileFromChat({
+                end_user_id: endUserId,
+                user_message: userMessage,
+                assistant_message: full,
+                by: adminId
+              }).catch(e => console.error("[ai-chat] profile sync failed:", e?.message || e));
+            }
             controller.close();
             return;
           } else if (evt.type === "error") {

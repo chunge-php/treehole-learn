@@ -137,6 +137,38 @@ export async function updateProfileFromReport(input: {
   if (error) throw new Error(error.message);
 }
 
+/** AI 聊天完成一轮 → 累积到 ai_history (滑动窗口 20 条 + 计数 + 最近时间) */
+export async function updateProfileFromChat(input: {
+  end_user_id: string;
+  user_message: string;
+  assistant_message: string;
+  by?: string | null;
+}) {
+  const sb = adminSupabase();
+  const { end_user_id, user_message, assistant_message, by = null } = input;
+
+  const { data: cur } = await sb.from("user_profiles")
+    .select("ai_history").eq("end_user_id", end_user_id).maybeSingle();
+  const ai_history: any = { ...(cur?.ai_history || {}) };
+  const recent_chats: any[] = Array.isArray(ai_history.recent_chats) ? ai_history.recent_chats : [];
+  recent_chats.unshift({
+    at: new Date().toISOString(),
+    user: user_message.slice(0, 200),                   // 学生提问 (截 200 字)
+    assistant: assistant_message.slice(0, 500)          // AI 回答摘要 (截 500 字)
+  });
+  ai_history.recent_chats = recent_chats.slice(0, 20);  // 滑动窗口保留最近 20 条
+  ai_history.last_chat_at = new Date().toISOString();
+  ai_history.total_chat_count = (Number(ai_history.total_chat_count) || 0) + 1;
+
+  const { error } = await sb.from("user_profiles").upsert({
+    end_user_id,
+    ai_history,
+    updated_by: by,
+    updated_at: new Date().toISOString()
+  }, { onConflict: "end_user_id" });
+  if (error) throw new Error(error.message);
+}
+
 /** 取焦虑三项里最重的等级做心理状态语义化 */
 function pickWorstAnxiety(v: { status_anxiety?: string; trait_anxiety?: string; study_anxiety?: string }): string | null {
   const order = ["重度", "中度", "轻度", "正常"];

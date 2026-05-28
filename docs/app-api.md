@@ -64,6 +64,7 @@
 | POST | `/api/app/study-session/heartbeat` | 心跳上报(每 30s)| ✅ |
 | POST | `/api/app/study-session/end` | 退出登录/离开页面时结束会话 | ✅ |
 | GET | `/api/app/study-session/today` | 拿当日累计学习时长(供首页/个人中心展示) | ✅ |
+| GET | `/api/app/profile/focus-curve` | **个人中心 24h 专注度折线图**(设计图 10) | ✅ |
 
 > 后续接口陆续补充: 心屿世界推荐、错题本、作文批改等。
 
@@ -1631,6 +1632,79 @@ App 启动后 `studySession.start()`,退出登录前 `await studySession.end()`,
 ### 后台展示
 
 后台 / 家长小程序需要这个数据时,直接走 `student_study_sessions` 表 SQL 聚合即可(已加索引)。给小程序家长端用的接口后续单独抛 `/api/mp/study-session/*`(memory 中规划过)。
+
+---
+
+## 个人中心 24h 专注度曲线 (设计图 10 顶部折线)
+
+学生进个人中心顶部看到的「我的专注时段」折线图,两条线:
+- **我的数值**(蓝色实线)— 学生自己最近 N 天每小时平均在线 %
+- **平均值**(橙色虚线)— 同店其他学生每小时平均(参照线)
+- 标注峰值小时 (`12:00 100%`) → 设计图里的「学习黄金期」标签
+
+数据基于 `student_study_sessions` 表的心跳计时,按小时切片聚合。无任何机器学习,纯统计 — 真实反映学生在线行为。
+
+### GET `/api/app/profile/focus-curve`
+
+```http
+GET /api/app/profile/focus-curve?days=7
+Authorization: Bearer <token>
+```
+
+| query | 说明 |
+|---|---|
+| `days` | 时间窗口:`1` (今天) / `7` (近 7 天, 默认) / `30` (近 30 天) |
+
+**响应**:
+```jsonc
+{
+  "ok": true,
+  "days": 7,
+  "window_start_date": "2026-05-22",
+  "window_end_date":   "2026-05-28",
+  "hourly": [
+    { "hour": 0,  "mine": 0,   "average": 1  },
+    { "hour": 1,  "mine": 0,   "average": 0  },
+    // ... 共 24 项, hour=0..23
+    { "hour": 12, "mine": 88,  "average": 62 },
+    { "hour": 15, "mine": 100, "average": 70 },
+    // ...
+    { "hour": 23, "mine": 12,  "average": 30 }
+  ],
+  "peak": {                        // 峰值; mine 全 0 时为 null
+    "hour": 15,
+    "value": 100,
+    "label": "下午黄金期"
+  }
+}
+```
+
+**字段说明**:
+- `mine[i]` / `average[i]`:第 i 小时(0-23)的专注度百分比,0-100
+  - 计算公式:近 N 天该小时累计在线分钟数 / (N × 60) × 100
+  - 100% = 每天该小时**全部在线**
+- `peak.label` 服务端自动按时段返回中文标签(`晨学黄金期 / 上午 / 午间 / 下午 / 傍晚 / 夜学`)
+
+### 业务规则
+
+- **新学生数据少**:`days=7` 时如果新学生才登录 2 天,曲线相对偏低也正常(分母按 7 天算)。如果要"按实际使用天数算",改 `days=1` 看今天。
+- **同店没其他学生**:`average` 全 0,前端可隐藏橙色虚线
+- **凌晨小时**:正常学生不会半夜学习,凌晨 mine + average 都接近 0,自然形成"专注集中在白天"的形态
+
+### Flutter 集成示例
+
+```dart
+final r = await dio.get('/api/app/profile/focus-curve?days=7',
+  options: Options(headers: {'Authorization': 'Bearer $token'}));
+
+final hourly = (r.data['hourly'] as List).cast<Map<String, dynamic>>();
+final peak = r.data['peak'];
+
+// 用 fl_chart 或 charts_flutter 渲染折线图:
+//   x 轴: hourly[i].hour
+//   y 轴: hourly[i].mine (蓝实线) + hourly[i].average (橙虚线)
+//   peak 那个点上方加个 Tooltip 文案 "${peak.label} ${peak.hour}:00 ${peak.value}%"
+```
 
 ---
 

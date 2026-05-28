@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Send, Eraser, Loader2, MessageSquare, Sparkles, AlertTriangle, Bot, User, FileText } from "lucide-react";
 import { buildSystemPrompt, type ChatBootstrap } from "../actions";
+import { MarkdownView } from "@/components/admin/MarkdownView";
 import { toast } from "sonner";
 
 type Msg = { role: "user" | "assistant"; content: string; streaming?: boolean };
@@ -246,9 +247,17 @@ function Bubble({ msg }: { msg: Msg }) {
       <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${isUser ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
         {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
       </div>
-      <div className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap ${isUser ? "bg-primary text-primary-foreground" : "bg-card border"}`}>
-        {msg.content || (msg.streaming ? <span className="text-muted-foreground italic">思考中…</span> : null)}
-        {msg.streaming && msg.content && <span className="inline-block w-2 h-3 align-middle ml-1 bg-current animate-pulse" />}
+      <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${isUser ? "bg-primary text-primary-foreground whitespace-pre-wrap" : "bg-card border"}`}>
+        {isUser ? (
+          msg.content
+        ) : msg.content ? (
+          <MarkdownView content={msg.content} />
+        ) : msg.streaming ? (
+          <span className="text-muted-foreground italic">思考中…</span>
+        ) : null}
+        {!isUser && msg.streaming && msg.content && (
+          <span className="inline-block w-1.5 h-3 align-middle ml-0.5 bg-primary animate-pulse rounded-sm" />
+        )}
       </div>
     </div>
   );

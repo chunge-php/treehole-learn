@@ -51,20 +51,16 @@ export async function GET(req: Request) {
       });
     }
 
+    // 只按 created_at 单字段倒序; 之前多重 .order(year).order(month).order(created_at)
+    // 在 PostgREST + Postgres 这边返回 0 行 (probe 单查得到 1 行) — 怀疑是 supabase-js
+    // 把多重 order 序列化成 query string 时跟某个版本的 PostgREST 不兼容. 单字段稳.
     const { data, error } = await sb
       .from("student_wishes")
       .select("id, title, content, year, month, created_at")
       .eq("end_user_id", child.id)
-      .order("year", { ascending: false })
-      .order("month", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(50);
     if (error) throw new Error(error.message);
-
-    // 临时 debug: 直接试一遍不带 order 的查询, 看是不是 order 的锅
-    const probe = await sb.from("student_wishes")
-      .select("id, end_user_id, title")
-      .eq("end_user_id", child.id);
 
     const list = (data || []).map((w: any) => ({
       id: w.id,
@@ -74,20 +70,7 @@ export async function GET(req: Request) {
       createdAt: w.created_at,
       preview: String(w.content || "").slice(0, 40)
     }));
-    return NextResponse.json({
-      ok: true,
-      student: { id: child.id, name: child.name },
-      list,
-      _debug: {
-        main_rows: (data || []).length,
-        main_err: error,
-        probe_rows: (probe.data || []).length,
-        probe_err: probe.error,
-        probe_first: probe.data?.[0] || null,
-        child_id_param: url.searchParams.get("endUserId"),
-        child_resolved: child.id
-      }
-    });
+    return NextResponse.json({ ok: true, student: { id: child.id, name: child.name }, list });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || "读取失败" }, { status: 500 });
   }

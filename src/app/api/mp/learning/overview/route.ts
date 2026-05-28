@@ -75,6 +75,40 @@ function sample13(arr: number[]): number[] {
   return arr.filter((_, i) => i % 2 === 0).concat([arr[23]]);
 }
 
+const CLOUD_COLORS = ["#1490ff", "#ff6a00", "#3CA272", "#73C0DE", "#FAC858", "#EE6666"];
+
+/**
+ * 关键词云 — 居中向外扩散布局 (黄金角螺旋)
+ *   - 第 0 个 (最重要) 在中心, 字号最大
+ *   - 后续按 √i × step 半径递增, 黄金角 137.5° 转动
+ *   - 字号 56 → 22 渐变
+ *   - 简易碰撞: 估算文字宽度后 x 居中偏移, 越界裁剪
+ * 画布按前端 .cloud-zone 100% × 440rpx 推算约 480 × 400
+ */
+function layoutCloudWords(words: string[]): Array<{ text: string; size: number; color: string; x: number; y: number }> {
+  const CW = 480, CH = 400;
+  const CX = CW / 2, CY = CH / 2;
+  const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+  return words.map((text, i) => {
+    const radius = i === 0 ? 0 : Math.sqrt(i) * 40;
+    const angle = i * GOLDEN;
+    const size = Math.max(22, 60 - i * 4);
+    // 中文每字宽 ≈ font-size, 英文/数字 ≈ 0.55 × font-size; 这里简单按字符数 × size × 0.95 估算
+    const approxW = text.length * size * 0.95;
+    const cx = CX + radius * Math.cos(angle);
+    const cy = CY + radius * Math.sin(angle);
+    const x = Math.max(8, Math.min(CW - approxW - 8, cx - approxW / 2));
+    const y = Math.max(8, Math.min(CH - size - 8, cy - size / 2));
+    return {
+      text,
+      size,
+      color: CLOUD_COLORS[i % CLOUD_COLORS.length],
+      x: Math.round(x),
+      y: Math.round(y)
+    };
+  });
+}
+
 export async function GET(req: Request) {
   const auth = getMpAuth(req);
   if (!auth) return NextResponse.json({ ok: false, error: "未登录" }, { status: 401 });
@@ -214,14 +248,7 @@ export async function GET(req: Request) {
       name: period === "today" ? "今日" : period === "week" ? "本周" : "本月",
       data: radarData
     },
-    cloud_words: keywords.map((w, i) => ({
-      text: w,
-      // 随机位置, 二期前端改用词云组件就不需要给 x/y
-      size: 28 + (i % 4) * 8,
-      color: ["#1490ff", "#ff6a00", "#3CA272", "#73C0DE", "#FAC858", "#EE6666"][i % 6],
-      x: 40 + (i * 67) % 440,
-      y: 60 + (i * 53) % 320
-    })),
+    cloud_words: layoutCloudWords(keywords),
     ai_sections
   });
 }

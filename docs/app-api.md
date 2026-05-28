@@ -37,6 +37,10 @@
 | POST | `/api/app/auth/login` | 学生账号密码登录 | ❌ |
 | GET | `/api/app/me` | 获取当前登录学生信息(启动时校验 token) | ✅ |
 | GET | `/api/app/home/today` | 首页今日数据(三态机:测评卡 / 解锁卡 / 完整 3 卡) | ✅ |
+| POST | `/api/app/eval/start` | 开始学习力测评(返回会话 + 自动续答) | ✅ |
+| GET | `/api/app/eval/sessions/:id` | 拿测评会话详情(题目 + 已答 map) | ✅ |
+| POST | `/api/app/eval/sessions/:id/answer` | 提交单题作答(完成时自动同步学生档案) | ✅ |
+| GET | `/api/app/eval/sessions/:id/result` | 拿测评报告(value1..value10 结构) | ✅ |
 
 > 后续接口陆续补充: 导学历日历、AI 聊天 SSE 流、心屿世界推荐、错题本、作文批改、人脸识别触发多模态等。
 
@@ -286,6 +290,267 @@ showAssignmentsCard(resp.data['assignments_summary']);
 | 401 | `UNAUTHORIZED` | token 失效,跳登录页 |
 | 403 | `ACCOUNT_DISABLED` | 学生账号被禁用 |
 | 404 | `NOT_FOUND` | 学生记录被删了 |
+
+---
+
+## 学习力测评(一次性,完成后写学生档案)
+
+测评对标后台「测评报告」功能,共 400+ 题(根据 `assessments` 表 status=active 题量决定),涵盖 4 个维度(多元性向 / 兴趣 / 自陈 / 多模态)。
+
+### 业务规则
+- **一次性**:每个学生只做一次,完成后首页不再弹「学习力测评卡」;如需重测从「个人中心」入口手动重启(后续接口提供)
+- **可续答**:学生答到一半退出 App,再进时 `POST /api/app/eval/start` 会返回上次进行中的 `session_id` (resumed=true),`GET sessions/:id` 拿到题目和已答的 map,从中断点继续
+- **完成即生效**:最后一题答完瞬间,后端自动生成报告 + 同步学生档案的 `basic.学生类型 / basic.八格类型 / psychology.焦虑等级 / report_latest 等`,Profile 同步反馈在 `profile_synced` 字段里
+
+### POST `/api/app/eval/start` — 开始/恢复测评
+
+```http
+POST /api/app/eval/start
+Authorization: Bearer <token>
+```
+无 body。
+
+**响应** — 3 种情况:
+
+1️⃣ **新建测评**(学生首次)
+```jsonc
+{
+  "ok": true,
+  "session_id": "rs_xxx",
+  "code": "XXL0000123",      // 学生唯一序号 (作为多模态音频 audio_id 用)
+  "total_questions": 406,
+  "answered_count": 0,
+  "status": "in_progress",
+  "resumed": false           // 新会话
+}
+```
+
+2️⃣ **续答**(有未完成的会话)
+```jsonc
+{
+  "ok": true,
+  "session_id": "rs_xxx",
+  "code": "XXL0000123",
+  "total_questions": 406,
+  "answered_count": 87,      // 已答了 87 题
+  "status": "in_progress",
+  "resumed": true            // 续答
+}
+```
+
+3️⃣ **已完成过**(`code: ALREADY_COMPLETED`)
+```jsonc
+{
+  "ok": false,
+  "error": "学习力测评已完成过, 如需重测请前往个人中心",
+  "code": "ALREADY_COMPLETED",
+  "last_completed_session_id": "rs_yyy"   // 上次完成的会话 id, 可直接调 result 拿报告
+}
+```
+HTTP 410。前端处理:跳到个人中心 → 学习力报告卡(直接显示 last_completed_session_id 的报告)。
+
+---
+
+### GET `/api/app/eval/sessions/:id` — 拿题目和已答
+
+```http
+GET /api/app/eval/sessions/rs_xxx
+Authorization: Bearer <token>
+```
+
+**响应**:
+```jsonc
+{
+  "ok": true,
+  "session": {
+    "id": "rs_xxx",
+    "code": "XXL0000123",
+    "total_questions": 406,
+    "answered_count": 87,
+    "status": "in_progress",
+    "completed_at": null,
+    "created_at": "2026-05-28T10:00:00.000Z"
+  },
+  "questions": [
+    {
+      "id": "as_001",
+      "title": "下列哪个选项更符合你的学习习惯?",
+      "description": null,
+      "cover_url": null,         // 题面图(可选)
+      "media_urls": null,        // 多图/视频(可选)
+      "dimension": "多元性向量表",   // 4 大维度之一
+      "qtype": "单选题",            // 单选题 / 判断题 / 语音题
+      "options": [
+        { "label": "认真听讲做笔记", "value": "A", "media_url": null, "media_type": null },
+        { "label": "看视频跟同学讨论", "value": "B" }
+        // ...
+      ],
+      "project_name": "学习风格",  // 题目分组名
+      "sort_order": 1
+    }
+    // ... 共 total_questions 道, 顺序固定 (创建会话时快照)
+  ],
+  "answers": {
+    "as_001": "A",        // 已答的题填字符串
+    "as_002": "B"
+    // 未答的不在这个对象里
+  }
+}
+```
+
+错误码:
+- 401 `UNAUTHORIZED`
+- 403 `NOT_OWNER`(企图访问别的学生的会话)
+- 404 `NOT_FOUND`
+
+---
+
+### POST `/api/app/eval/sessions/:id/answer` — 提交单题
+
+每答完一题就调一次。完成最后一题时,响应会附带档案同步结果。
+
+```http
+POST /api/app/eval/sessions/rs_xxx/answer
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "assessment_id": "as_001",
+  "answer": "A"             // 单选/判断: 选项 value; 语音题: 音频 URL; 跳过传 null
+}
+```
+
+**响应** — 普通题:
+```jsonc
+{
+  "ok": true,
+  "answered": 88,
+  "total": 406,
+  "completed": false
+}
+```
+
+**响应** — 最后一题(触发档案同步):
+```jsonc
+{
+  "ok": true,
+  "answered": 406,
+  "total": 406,
+  "completed": true,
+  "profile_synced": {
+    "ok": true,
+    "fields": ["basic.学生类型", "basic.八格类型", "psychology.焦虑等级", "psychology.情绪", "report_latest"]
+  }
+}
+```
+
+如果同步失败:
+```jsonc
+{
+  "ok": true, "answered": 406, "total": 406, "completed": true,
+  "profile_synced": { "ok": false, "fields": [], "error": "..." }
+}
+```
+
+> 注:`profile_synced` 字段**仅在最后一题完成的那次响应**才有,后续重复调不会再同步。
+
+错误码:
+- 400 `MISSING_FIELDS` / `INVALID_QUESTION`(题不属于此测评)
+- 401/403/404 同上
+
+---
+
+### GET `/api/app/eval/sessions/:id/result` — 拿报告
+
+测评完成后展示给学生的最终报告。
+
+```http
+GET /api/app/eval/sessions/rs_xxx/result
+Authorization: Bearer <token>
+```
+
+**响应**:
+```jsonc
+{
+  "ok": true,
+  "session": {
+    "id": "rs_xxx",
+    "code": "XXL0000123",
+    "completed_at": "2026-05-28T15:30:00.000Z"
+  },
+  "report": {
+    "name": "张小明", "code": "XXL0000123", "dates": "2026-05-28",
+    "value1": {                     // 学生类型
+      "name": "张小明", "title": "自信稳健型",
+      "describe": "基础扎实但缺乏突破动力...", "content": "..."
+    },
+    "value2": {                     // 多元性向量化分布 (维度 → 等级)
+      "逻辑思维": 8, "阅读能力": 7, "专注力": 6, ...
+    },
+    "value3": {                     // 八格类型
+      "title": "学格3型", "str": "...", "content": "...", "suggest": "..."
+    },
+    "value4": {                     // 焦虑等级
+      "status_anxiety": "中度", "trait_anxiety": "轻度", "study_anxiety": "轻度"
+    },
+    "value5": [                     // 焦虑分数
+      { "title": "状态焦虑", "value": 65 },
+      { "title": "特质焦虑", "value": 42 },
+      { "title": "感知压力", "value": 38 }
+    ],
+    "value6": [...],                // 多元性向结果数组
+    "value7": [...],                // 项目数组
+    "value8": {                     // 兴趣六型 (霍兰德)
+      "scores_cake": [...], "career_name": "...",
+      "top3": "S/I/A", "distinguish": "区分性 D 值: ...",
+      "harmony_value": 4, "self_introduce": "...",
+      "interest_arr": [...], "major_arr": [...]
+    },
+    "value9": [...],                // 报告结论
+    "value10": [...]                // 发展建议
+  }
+}
+```
+
+> `value1..value10` 字段语义跟后台 `ReportView` 完全一致, 前端按这套渲染即可。
+
+错误码:
+- 409 `NOT_COMPLETED`(还在答题中,没法拿报告)
+- 500 `BUILD_FAILED`(报告构建失败,极少见,看服务端日志)
+
+---
+
+### 完整流程示例(Flutter 伪代码)
+
+```dart
+// 1. 学生在首页 no_eval 状态, 点测评卡
+final start = await api.post('/api/app/eval/start');
+final sessionId = start['session_id'];
+
+// 2. 拿题目和已答 (支持续答)
+final detail = await api.get('/api/app/eval/sessions/$sessionId');
+final questions = detail['questions'];
+final answers = detail['answers'];
+
+// 3. 一题一题答, 答完即提交
+for (final q in questions) {
+  if (answers[q['id']] != null) continue;  // 跳过已答
+  final myAnswer = showQuestion(q);
+  final res = await api.post('/api/app/eval/sessions/$sessionId/answer', {
+    'assessment_id': q['id'],
+    'answer': myAnswer,
+  });
+  updateProgress(res['answered'], res['total']);
+  if (res['completed'] == true) {
+    if (res['profile_synced']?['ok']) toast('档案已更新');
+    break;
+  }
+}
+
+// 4. 拿报告
+final result = await api.get('/api/app/eval/sessions/$sessionId/result');
+renderReport(result['report']);   // 用 value1..value10 渲染
+```
 
 ---
 

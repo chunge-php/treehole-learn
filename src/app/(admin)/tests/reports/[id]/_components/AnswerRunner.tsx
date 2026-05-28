@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { SafeImage } from "@/components/admin/SafeImage";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { saveAnswer, quickFillAnswers, answerVoiceWithSample } from "../../actions";
-import { DIMENSION_VARIANT, QTYPE_VARIANT } from "../../../_components/constants";
+import { DIMENSION_VARIANT, QTYPE_VARIANT } from "@/app/(admin)/assessments/_components/constants";
 import { ArrowLeft, ChevronLeft, ChevronRight, Check, Loader2, LayoutGrid, FileBarChart, Mic, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";

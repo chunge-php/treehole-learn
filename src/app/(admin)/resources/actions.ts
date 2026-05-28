@@ -187,7 +187,7 @@ export async function bulkImportResources(rows: Record<string, any>[]) {
 export async function listCategories() {
   requireAdmin();
   const sb = adminSupabase();
-  // 一次拿全部 (一级+二级), 客户端 join, 给二级附加父级名做 hint
+  // 返回完整树 (一级 + 二级), 前端用 parent_id 拆分做级联选择
   const { data } = await sb.from("top_types")
     .select("id, name, parent_id, sort_order")
     .eq("status", "active")
@@ -196,15 +196,11 @@ export async function listCategories() {
   const parentNameMap = new Map(
     rows.filter((c: any) => !c.parent_id).map((c: any) => [c.id, c.name as string])
   );
-  // 按父分组排序: 同一父级下的二级聚在一起
-  return rows
-    .filter((c: any) => c.parent_id)
-    .map((c: any) => ({
-      id: c.id as string,
-      name: c.name as string,
-      parent_id: c.parent_id as string,
-      parent_name: parentNameMap.get(c.parent_id) || null
-    }))
-    .sort((a, b) => (a.parent_name || "").localeCompare(b.parent_name || ""));
+  return rows.map((c: any) => ({
+    id: c.id as string,
+    name: c.name as string,
+    parent_id: (c.parent_id as string | null) || null,
+    parent_name: c.parent_id ? (parentNameMap.get(c.parent_id) || null) : null
+  }));
 }
 

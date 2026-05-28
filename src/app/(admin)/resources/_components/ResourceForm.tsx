@@ -44,6 +44,18 @@ export function ResourceForm({
   });
   const [pending, start] = useTransition();
 
+  // 一级 / 二级分类拆分 + 当前选中的一级 (用于级联)
+  const topLevels = categories.filter(c => !c.parent_id);
+  const subLevels = categories.filter(c => c.parent_id);
+  // 当前选中的二级反推一级
+  const initialParentId = (() => {
+    if (!initial?.category_id) return null;
+    const found = subLevels.find(c => c.id === initial.category_id);
+    return found?.parent_id || null;
+  })();
+  const [parentId, setParentId] = useState<string | null>(initialParentId);
+  const subsInParent = parentId ? subLevels.filter(c => c.parent_id === parentId) : [];
+
   useEffect(() => {
     if (!open) return;
     setForm({
@@ -61,6 +73,14 @@ export function ResourceForm({
       sort_order: initial?.sort_order ?? 0,
       remark: initial?.remark || ""
     });
+    // 反推一级 (从初始二级 category_id 取 parent_id)
+    if (initial?.category_id) {
+      const found = subLevels.find(c => c.id === initial.category_id);
+      setParentId(found?.parent_id || null);
+    } else {
+      setParentId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial, open, defaultType]);
 
   const isFile = form.type === "file";
@@ -189,22 +209,34 @@ export function ResourceForm({
                     管理顶级类型 <ArrowUpRight className="h-3 w-3" />
                   </Link>
                 </div>
-                <Combobox
-                  options={categories.map(c => ({
-                    value: c.id,
-                    label: c.name,
-                    hint: c.parent_name || undefined
-                  }))}
-                  value={form.category_id || null}
-                  onChange={v => setForm({ ...form, category_id: v })}
-                  placeholder="未分类"
-                  searchPlaceholder="搜索分类名…"
-                  emptyText={categories.length === 0 ? "请先在「顶级类型」中创建二级分类" : "无匹配"}
-                  clearable
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <Combobox
+                    options={topLevels.map(c => ({ value: c.id, label: c.name }))}
+                    value={parentId}
+                    onChange={v => {
+                      setParentId(v || null);
+                      // 切一级时清空二级 (避免悬挂选择)
+                      setForm(f => ({ ...f, category_id: null }));
+                    }}
+                    placeholder="选一级分类"
+                    searchPlaceholder="搜索…"
+                    emptyText={topLevels.length === 0 ? "尚未配置一级分类" : "无匹配"}
+                    clearable
+                  />
+                  <Combobox
+                    key={`sub-${parentId || "none"}`}
+                    options={subsInParent.map(c => ({ value: c.id, label: c.name }))}
+                    value={form.category_id || null}
+                    onChange={v => setForm({ ...form, category_id: v })}
+                    placeholder={parentId ? "选二级分类" : "请先选一级"}
+                    searchPlaceholder="搜索…"
+                    emptyText={!parentId ? "请先选一级" : (subsInParent.length === 0 ? "该一级下暂无二级" : "无匹配")}
+                    clearable
+                  />
+                </div>
                 {categories.length === 0 && (
                   <p className="text-[11px] text-warning">
-                    尚未配置任何二级分类, 请先到「设置 → 顶级类型」中创建
+                    尚未配置任何分类, 请先到「设置 → 顶级类型」中创建
                   </p>
                 )}
               </div>

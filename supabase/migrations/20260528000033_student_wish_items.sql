@@ -9,8 +9,8 @@ create table if not exists student_wish_items (
   content      text not null,
   created_at   timestamptz not null default now()
 );
-create index if not exists wish_items_user_idx       on student_wish_items(end_user_id, created_at desc);
-create index if not exists wish_items_user_month_idx on student_wish_items(end_user_id, (date_trunc('month', created_at)));
+-- 用户 + 时间倒序索引: 按 created_at 范围查 (本月条目) 跟最近条目都能命中
+create index if not exists wish_items_user_idx on student_wish_items(end_user_id, created_at desc);
 
 alter table student_wish_items enable row level security;
 create policy wish_items_admin_all on student_wish_items for all using (true) with check (true);

@@ -37,13 +37,10 @@ function getRange(period: "today" | "week" | "month"): { start: Date; end: Date;
   return { start, end: todayEnd, startStr: fmtDate(start), endStr: fmtDate(todayEnd) };
 }
 
-/** 简化版按小时聚合: 24 长度数组, 单位 % (天均) */
-function aggregateHourlyPercent(
-  sessions: Array<{ started_at: string; ended_at: string | null; last_heartbeat_at: string }>,
-  start: Date,
-  end: Date,
-  totalDays: number
-): number[] {
+type SessionRow = { started_at: string; ended_at: string | null; last_heartbeat_at: string };
+
+/** 按小时累计学习分钟数, 返回 24 长度数组 (单位: 分钟) */
+function aggregateHourlyMinutes(sessions: SessionRow[], start: Date, end: Date): number[] {
   const hourly = new Array(24).fill(0);
   for (const s of sessions) {
     const sStart = new Date(s.started_at);
@@ -62,7 +59,20 @@ function aggregateHourlyPercent(
       cursor = segEnd;
     }
   }
-  return hourly.map(min => Math.min(100, Math.round(min / Math.max(1, totalDays) / 60 * 100)));
+  return hourly;
+}
+
+/** 累计分钟 → 0-100% (每小时最多 60 分钟视为 100%) */
+function toPercent(hourlyMinutes: number[], divisor: number): number[] {
+  return hourlyMinutes.map(min => {
+    const avg = min / Math.max(1, divisor);
+    return Math.min(100, Math.round(avg / 60 * 100));
+  });
+}
+
+/** 取偶数小时 + 23 时, 共 13 个采样点 (跟前端 chart categories 长度一致) */
+function sample13(arr: number[]): number[] {
+  return arr.filter((_, i) => i % 2 === 0).concat([arr[23]]);
 }
 
 export async function GET(req: Request) {
@@ -89,11 +99,12 @@ export async function GET(req: Request) {
   const range = getRange(period);
   const totalDays = Math.max(1, Math.ceil((range.end.getTime() - range.start.getTime()) / (24 * 3600 * 1000)));
 
-  // 并发拿 assignments / student_study_sessions / user_profiles
+  // 并发拿 assignments / 自己的 sessions / user_profiles / 学生 store_id (后面算同店均值要用)
   const [
     { data: assignments },
     { data: sessions },
-    { data: profile }
+    { data: profile },
+    { data: student }
   ] = await Promise.all([
     sb.from("assignments")
       .select("id, completed_at, start_date, end_date")
@@ -105,19 +116,37 @@ export async function GET(req: Request) {
       .eq("end_user_id", endUserId)
       .gte("date", range.startStr)
       .lte("date", range.endStr),
-    sb.from("user_profiles").select("basic, psychology, multimodal_latest, report_latest").eq("end_user_id", endUserId).maybeSingle()
+    sb.from("user_profiles").select("basic, psychology, multimodal_latest, report_latest").eq("end_user_id", endUserId).maybeSingle(),
+    sb.from("end_users").select("store_id").eq("id", endUserId).maybeSingle()
   ]);
 
   // todo 统计
   const total = (assignments || []).length;
   const done = (assignments || []).filter((a: any) => !!a.completed_at).length;
 
-  // focus_chart — 按小时聚合 (12 个采样点足以画曲线, 但小程序前端已经画了 13 个点, 跟着给 13)
-  const hourlyPct = aggregateHourlyPercent(
-    (sessions || []) as any[],
-    range.start, range.end, totalDays
-  );
-  const sample13 = (arr: number[]) => arr.filter((_, i) => i % 2 === 0).concat([arr[23]]);   // 取偶数小时 + 23 时, 共 13 个
+  // focus_chart 「我的数值」: 按小时累计 → 天均 → %
+  const myMinutes = aggregateHourlyMinutes((sessions || []) as SessionRow[], range.start, range.end);
+  const minePct = toPercent(myMinutes, totalDays);
+
+  // focus_chart 「平均值」: 同店其他 active 学生同 period 的小时聚合 / (天数 * 学生数)
+  let avgPct = new Array(24).fill(0);
+  if ((student as any)?.store_id) {
+    const { data: peerIds } = await sb.from("end_users")
+      .select("id")
+      .eq("store_id", (student as any).store_id)
+      .eq("status", "active")
+      .neq("id", endUserId);
+    const peerIdList = (peerIds || []).map((r: any) => r.id as string);
+    if (peerIdList.length > 0) {
+      const { data: peerSessions } = await sb.from("student_study_sessions")
+        .select("started_at, ended_at, last_heartbeat_at")
+        .in("end_user_id", peerIdList)
+        .gte("date", range.startStr)
+        .lte("date", range.endStr);
+      const peerMinutes = aggregateHourlyMinutes((peerSessions || []) as SessionRow[], range.start, range.end);
+      avgPct = toPercent(peerMinutes, totalDays * peerIdList.length);
+    }
+  }
 
   // radar — multimodal_latest 三维度
   const mm: any = (profile as any)?.multimodal_latest || {};
@@ -163,9 +192,8 @@ export async function GET(req: Request) {
     focus_chart: {
       categories: ["0", "2", "4", "6", "8", "10", "12", "14", "16", "18", "20", "22", "24"],
       series: [
-        { name: "我的数值", data: sample13(hourlyPct), lineType: "solid" },
-        // 平均值: 同店其他学生暂略, 一期固定参考值, 二期补 (跟 /api/app/profile/focus-curve 类似)
-        { name: "平均值",   data: [22, 30, 35, 42, 70, 55, 48, 50, 45, 40, 45, 25, 20], lineType: "dash" }
+        { name: "我的数值", data: sample13(minePct), lineType: "solid" },
+        { name: "平均值",   data: sample13(avgPct),  lineType: "dash"  }
       ]
     },
     radar: {

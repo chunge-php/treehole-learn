@@ -1715,10 +1715,29 @@ final peak = r.data['peak'];
 - 平板/小程序连这个 IP 直接联调
 - 没部署到公网前,扣子相关图片接口走后端中转(已处理)
 
-### 测试账号
-后台 「用户管理」 (`/end-users`) 里新建学生时勾选「设置登录账号」,会要求填 username + 初始密码,这就是 App 登录用的。
+### 学生账号 = 平台端「用户管理」(`/end-users`)的 end_users
 
-如果没找到测试账号,可以让后台超管账号(`admin / admin123`)登录平台后,在「用户管理」给某个学生设置登录账号。
+完整数据链路:
+
+```
+管理后台超管登录 (admin / admin123)
+  └─ 进 /end-users 新建/编辑学生
+       └─ 勾选「设置登录账号」(右下角折叠区)
+            ├─ login_username (登录账号, 全局唯一)
+            └─ login_password (初始密码)
+                       ↓
+                  保存到 end_users 表
+                       ↓
+       学生在 App 用这个账号密码 → POST /api/app/auth/login
+                       ↓
+            返回 token, 后续所有接口都带 Authorization: Bearer <token>
+```
+
+### 联调步骤
+1. 你(后端/老师)登录管理后台 `admin / admin123`
+2. 进 `/end-users`,选一个学生点编辑(或新建),展开「设置登录账号」勾选 → 填 username + 初始密码 → 保存
+3. 把这套 username + password 给同事(Flutter)
+4. Flutter 端在登录页输入 → 调 `/api/app/auth/login` → 拿 token → 调所有其他接口
 
 ### 字段命名
 - 数据库字段统一**蛇形** (`login_username`, `parent_name`)

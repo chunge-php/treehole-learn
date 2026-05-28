@@ -209,25 +209,29 @@ export function ProfileViewerClient({ students, initialId }: { students: Student
             {/* AI 档案分片 */}
             <TabsContent value="ai" className="pt-3">
               <div className="grid gap-3 md:grid-cols-2">
-                <SectionCard title="基础档案 (basic)" empty={isEmpty(dossier.profile?.basic)}>
-                  <JsonBlock data={dossier.profile?.basic} />
-                </SectionCard>
-                <SectionCard title="知识点 (knowledge)" empty={isEmpty(dossier.profile?.knowledge)}>
-                  <JsonBlock data={dossier.profile?.knowledge} />
-                </SectionCard>
-                <SectionCard title="课程与刷题 (courses)" empty={isEmpty(dossier.profile?.courses)}>
-                  <JsonBlock data={dossier.profile?.courses} />
-                </SectionCard>
-                <SectionCard title="今日学习状态 (today_state)" empty={isEmpty(dossier.profile?.today_state)}>
-                  <JsonBlock data={dossier.profile?.today_state} />
-                </SectionCard>
-                <SectionCard title="心理状态 (psychology)" empty={isEmpty(dossier.profile?.psychology)}>
-                  <JsonBlock data={dossier.profile?.psychology} />
-                </SectionCard>
-                <SectionCard title="AI 互动 (ai_history)" empty={isEmpty(dossier.profile?.ai_history)}>
-                  <JsonBlock data={dossier.profile?.ai_history} />
-                </SectionCard>
+                <FriendlyCard title="基础档案" code="basic" data={dossier.profile?.basic} />
+                <FriendlyCard title="知识点" code="knowledge" data={dossier.profile?.knowledge} arrayKeys={["mastered", "weak", "blind"]} arrayLabels={{ mastered: "已熟练", weak: "薄弱", blind: "盲区" }} />
+                <FriendlyCard title="课程与刷题" code="courses" data={dossier.profile?.courses} />
+                <FriendlyCard title="今日学习状态" code="today_state" data={dossier.profile?.today_state} />
+                <FriendlyCard title="心理状态" code="psychology" data={dossier.profile?.psychology} />
+                <FriendlyCard title="AI 互动" code="ai_history" data={dossier.profile?.ai_history} excludeKeys={["recent_chats"]} />
               </div>
+              {Array.isArray(dossier.profile?.ai_history?.recent_chats) && dossier.profile.ai_history.recent_chats.length > 0 && (
+                <Card className="mt-3 p-4">
+                  <div className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" /> 最近 AI 对话 ({dossier.profile.ai_history.recent_chats.length})
+                  </div>
+                  <div className="space-y-2 max-h-80 overflow-auto">
+                    {dossier.profile.ai_history.recent_chats.map((c: any, i: number) => (
+                      <div key={i} className="rounded border bg-muted/30 p-2 text-xs">
+                        <div className="text-[10px] text-muted-foreground mb-1">{new Date(c.at).toLocaleString("zh-CN", { hour12: false })}</div>
+                        <div className="mb-1"><span className="font-medium text-primary">学生:</span> {c.user}</div>
+                        <div className="text-muted-foreground line-clamp-3"><span className="font-medium not-italic">导师:</span> {c.assistant}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
             </TabsContent>
 
             {/* 更新流水 */}
@@ -298,6 +302,106 @@ function isEmpty(o: any) { return !o || (typeof o === "object" && Object.keys(o)
 
 function JsonBlock({ data }: { data: any }) {
   return <pre className="text-xs whitespace-pre-wrap font-sans bg-muted/40 rounded p-2 max-h-60 overflow-auto">{JSON.stringify(data, null, 2)}</pre>;
+}
+
+/** 友好展示一个 jsonb 分片 — 外层人性化键值对/Badge, 底部可展开原始 JSON */
+function FriendlyCard({
+  title, code, data, arrayKeys = [], arrayLabels = {}, excludeKeys = []
+}: {
+  title: string;
+  code: string;
+  data: any;
+  arrayKeys?: string[];
+  arrayLabels?: Record<string, string>;
+  excludeKeys?: string[];
+}) {
+  const empty = isEmpty(data);
+  return (
+    <Card className="p-4">
+      <div className="text-sm font-medium mb-2 flex items-center justify-between">
+        <span>{title}</span>
+        <code className="text-[10px] text-muted-foreground font-mono">{code}</code>
+      </div>
+      {empty ? (
+        <div className="text-xs text-muted-foreground py-4 text-center">—</div>
+      ) : (
+        <div className="space-y-2">
+          {/* 数组字段 (如 knowledge 三类) — 用 Badge */}
+          {arrayKeys.map(k => {
+            const arr: any[] = Array.isArray(data?.[k]) ? data[k] : [];
+            if (arr.length === 0) return null;
+            return (
+              <div key={k}>
+                <div className="text-xs text-muted-foreground mb-1">{arrayLabels[k] || k}</div>
+                <div className="flex flex-wrap gap-1">
+                  {arr.map((item, i) => (
+                    <Badge key={i} variant="outline" className="font-normal">{String(item)}</Badge>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {/* 其他字段 — 键值对 */}
+          {Object.entries(data || {})
+            .filter(([k]) => !arrayKeys.includes(k) && !excludeKeys.includes(k))
+            .map(([k, v]) => (
+              <KvRow key={k} k={k} v={v} />
+            ))}
+          {/* 底部可展开看原始 JSON */}
+          <details className="pt-2 border-t mt-2">
+            <summary className="cursor-pointer text-[11px] text-muted-foreground hover:text-foreground">查看原始 JSON</summary>
+            <pre className="mt-2 text-[11px] whitespace-pre-wrap font-mono bg-muted/40 rounded p-2 max-h-60 overflow-auto">{JSON.stringify(data, null, 2)}</pre>
+          </details>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** 单个键值对; value 为对象/数组时递归展开 */
+function KvRow({ k, v }: { k: string; v: any }) {
+  if (v == null || v === "") return null;
+
+  // 嵌套对象 — 缩进显示
+  if (typeof v === "object" && !Array.isArray(v)) {
+    const entries = Object.entries(v).filter(([, vv]) => vv != null && vv !== "");
+    if (entries.length === 0) return null;
+    return (
+      <div className="text-xs">
+        <div className="text-muted-foreground mb-1">{k}</div>
+        <div className="ml-3 space-y-1 border-l-2 border-border/40 pl-3">
+          {entries.map(([kk, vv]) => <KvRow key={kk} k={kk} v={vv} />)}
+        </div>
+      </div>
+    );
+  }
+
+  // 数组 — Badge
+  if (Array.isArray(v)) {
+    return (
+      <div className="text-xs">
+        <span className="text-muted-foreground mr-2">{k}:</span>
+        <div className="inline-flex flex-wrap gap-1">
+          {v.map((item, i) => (
+            <Badge key={i} variant="outline" className="font-normal">
+              {typeof item === "object" ? JSON.stringify(item).slice(0, 30) : String(item)}
+            </Badge>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // 标量
+  const isTime = typeof v === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v);
+  return (
+    <div className="text-xs flex items-baseline gap-2">
+      <span className="text-muted-foreground shrink-0">{k}:</span>
+      <span className="font-medium break-all">
+        {isTime ? new Date(v).toLocaleString("zh-CN", { hour12: false }) : String(v)}
+      </span>
+    </div>
+  );
 }
 
 function MultimodalSummary({ mm }: { mm: any }) {

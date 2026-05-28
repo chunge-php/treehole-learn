@@ -174,9 +174,11 @@ export async function* streamLetter(input: {
     for await (const evt of streamWorkflow({
       workflowId,
       parameters: {
-        // 做法 A: system_role + rules 已写死在扣子工作流 LLM 节点的 System Prompt 里,
-        // 这里只送动态变量. 如果改成做法 B (变量驱动), 把 system_role / rules 也送过去.
+        // 做法 B (变量驱动): system_role + rules 都从后台 prompt_templates 读出来传过去,
+        // 扣子工作流 LLM 节点只引用变量, 不写死. 这样后台改提示词扣子不用动.
+        system_role: template.system_role,
         student_context: context.rendered,
+        rules: template.rules,
         year: context.year,
         month: context.month
       }
@@ -227,8 +229,10 @@ export async function generateLetter(input: {
     const res = await runWorkflow({
       workflowId,
       parameters: {
-        // 同 streamLetter, 做法 A: 只送 3 个动态变量
+        // 同 streamLetter, 做法 B: 变量驱动, 5 个参数全送
+        system_role: template.system_role,
         student_context: context.rendered,
+        rules: template.rules,
         year: context.year,
         month: context.month
       }

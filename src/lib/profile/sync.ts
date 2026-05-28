@@ -253,10 +253,14 @@ export async function updateProfileFromChat(input: {
   if (error) throw new Error(error.message);
 }
 
-/** 取焦虑三项里最重的等级做心理状态语义化 */
-function pickWorstAnxiety(v: { status_anxiety?: string; trait_anxiety?: string; study_anxiety?: string }): string | null {
+/** 取焦虑三项里最重的等级做心理状态语义化; 容错: value4 字段可能是字符串/数字/对象 */
+function pickWorstAnxiety(v: any): string | null {
+  if (!v) return null;
   const order = ["重度", "中度", "轻度", "正常"];
-  const all = [v?.status_anxiety, v?.trait_anxiety, v?.study_anxiety].filter(Boolean) as string[];
+  // 任何类型都 toString, 再过滤掉空值
+  const all = [v?.status_anxiety, v?.trait_anxiety, v?.study_anxiety]
+    .filter(x => x !== undefined && x !== null && x !== "")
+    .map(x => typeof x === "object" ? JSON.stringify(x) : String(x));
   if (!all.length) return null;
   for (const lv of order) {
     const hit = all.find(x => x.includes(lv));

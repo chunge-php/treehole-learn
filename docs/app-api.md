@@ -57,6 +57,7 @@
 | POST | `/api/app/face-check/finalize` | **多模态评估完成**(生成 11 项分值 + 写学生档案) | ✅ |
 | GET | `/api/app/assignments/calendar` | 导学历月历分布(每天任务数 + 完成数) | ✅ |
 | GET | `/api/app/assignments?date=` | 当日任务列表(按学科分组) | ✅ |
+| POST | `/api/app/assignments` | **智能添加作业**(学生 App 端,设计图 9) | ✅ |
 | GET | `/api/app/assignments/:id` | 任务详情(支持 3 种 task_type) | ✅ |
 | POST | `/api/app/assignments/:id/complete` | 标记任务完成 / 取消完成 | ✅ |
 
@@ -1280,6 +1281,72 @@ Authorization: Bearer <token>
 | 401 | `UNAUTHORIZED` | token 失效 |
 | 403 | `NOT_OWNER` | 任务不属于该学生 |
 | 404 | `NOT_FOUND` | 任务被删除 |
+
+---
+
+### POST `/api/app/assignments` — 智能添加作业(设计图 9)
+
+学生在导学历右上「+ 智能添加」 → 弹窗输入作业内容 + 起止时间 + 可选拍照 → 提交。
+
+```http
+POST /api/app/assignments
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "name": "一元一次方程练习 P32 1-10 题",       // 必填: 作业标题/内容摘要
+  "subject": "数学",                              // 选填: 学科 (没填默认归"作业")
+  "content_md": "完成课本 P32 1-10 题, 注意检查...",// 选填: 富文本详情
+  "image_url": "https://....png",                 // 选填: 拍照上传后的 URL (作为封面, OCR 后置)
+  "start_date": "2026-05-28",                     // 必填: 起始日 YYYY-MM-DD (也接受 YYYY-MM-DD HH:mm)
+  "end_date": "2026-05-29",                       // 选填: 缺省 = start_date
+  "estimated_minutes": 30                         // 选填: 预计用时
+}
+```
+
+**响应**:
+```jsonc
+{
+  "ok": true,
+  "task": {
+    "id": "as_xxx",
+    "name": "一元一次方程练习 P32 1-10 题",
+    "subject": "数学",
+    "task_type": "homework",                  // App 端创建固定 homework
+    "source": "student",                       // App 端创建固定 student
+    "start_date": "2026-05-28",
+    "end_date": "2026-05-29",
+    "estimated_minutes": 30,
+    "cover_url": "https://....png",
+    "content_md": "...",
+    "completed_at": null,
+    "is_completed": false,
+    "created_at": "2026-05-28T16:00:00.000Z"
+  }
+}
+```
+
+**错误码**:
+| HTTP | code | 说明 |
+|---|---|---|
+| 400 | `MISSING_FIELDS` | name 为空 |
+| 400 | `INVALID_DATE` | start_date 格式错 |
+| 400 | `INVALID_DATE_RANGE` | end_date < start_date |
+| 401 | `UNAUTHORIZED` | token 失效 |
+| 403 | `ACCOUNT_DISABLED` | 账号被禁用 |
+| 404 | `NOT_FOUND` | 学生不存在 |
+
+### 📷 关于「图片识别」按钮(设计图 9 左下)
+
+**一期当前阶段**:OCR 真接口甲方未给,处理方式:
+- App 端「图片识别」按钮可以**先禁用**,或者改成「上传图片」(只上传作为封面/附件,不做 OCR)
+- 上传流程复用 `POST /api/app/ai/upload-image` 拿到 URL → 在创建作业时塞 `image_url` 字段
+- 学生**仍然要手输** `name` 和 `content_md`(图片只是参考材料)
+
+**二期(OCR 接口给后)**:
+- 新增 `POST /api/app/assignments/recognize-image` 接口
+- 客户端选图 → 调 OCR → 后端返回识别文字 → 学生预览/编辑 → 提交本接口
+- 接口签名届时另行添加,本接口字段不变
 
 ---
 

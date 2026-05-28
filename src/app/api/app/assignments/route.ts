@@ -1,26 +1,26 @@
 /**
- * GET /api/app/assignments?date=YYYY-MM-DD — 当日任务列表 (按学科分组)
+ * GET  /api/app/assignments?date=YYYY-MM-DD — 当日任务列表 (按学科分组)
+ * POST /api/app/assignments                 — 学生智能添加作业 (设计图 9)
  *
  *   header:  Authorization: Bearer <token>
- *   query:   ?date=2026-05-28  (默认今天)
- *   resp:    {
- *     ok, date,
- *     pending_count, completed_count,
- *     by_subject: [ { subject, count, remaining_minutes, tasks: [...] } ]
- *   }
- *
- * 数据合并: 作业 (admin/parent/student) + 系统推荐 (recommendation, 心屿世界第三方)
- *  - 暂时全部走 assignments 表 source 字段区分; 推荐部分接通后端写入即可, 前端不变
  */
 import { NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { requireAppAuth } from "@/lib/app-session";
+import { shortId } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
 function todayStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function toDateOnly(s: string): string | null {
+  // 接受 YYYY-MM-DD 或 YYYY-MM-DD HH:mm[:ss], 取前 10 字符
+  if (typeof s !== "string") return null;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
 export async function GET(req: Request) {
@@ -78,5 +78,88 @@ export async function GET(req: Request) {
     pending_count: tasks.filter(t => !t.is_completed).length,
     completed_count: tasks.filter(t => t.is_completed).length,
     by_subject
+  });
+}
+
+/**
+ * POST /api/app/assignments — 智能添加作业 (设计图 9)
+ *
+ *   header:  Authorization: Bearer <token>
+ *   body:    { name, subject?, content_md?, image_url?, start_date, end_date?, estimated_minutes? }
+ *   resp:    { ok, task }
+ *
+ * 默认值:
+ *  - source = "student"  (App 端学生自建)
+ *  - task_type = "homework"
+ *  - end_date 缺省 = start_date
+ *  - subject 缺省为 null, 前端展示归"作业"
+ *
+ * OCR(图片识别) 一期不接, image_url 仅作为附件/封面 cover_url 存档,
+ * 二期甲方提供 OCR 接口后, 客户端先调 OCR 把识别文字回填到 name/content_md 再调本接口
+ */
+export async function POST(req: Request) {
+  const auth = requireAppAuth(req);
+  if (!auth.ok) return auth.response;
+
+  const body = await req.json().catch(() => ({} as any));
+  const name = String(body?.name || "").trim();
+  const subject = body?.subject ? String(body.subject).trim() : null;
+  const content_md = body?.content_md ? String(body.content_md) : null;
+  const image_url = body?.image_url ? String(body.image_url).trim() : null;
+  const startDateRaw = String(body?.start_date || "").trim();
+  const endDateRaw = body?.end_date ? String(body.end_date).trim() : "";
+  const estimated = typeof body?.estimated_minutes === "number" ? body.estimated_minutes : null;
+
+  if (!name) {
+    return NextResponse.json({ ok: false, error: "请填写作业内容", code: "MISSING_FIELDS" }, { status: 400 });
+  }
+  const start = toDateOnly(startDateRaw);
+  if (!start) {
+    return NextResponse.json({ ok: false, error: "起始时间格式必须 YYYY-MM-DD", code: "INVALID_DATE" }, { status: 400 });
+  }
+  const end = toDateOnly(endDateRaw) || start;
+  if (end < start) {
+    return NextResponse.json({ ok: false, error: "结束时间不能早于起始时间", code: "INVALID_DATE_RANGE" }, { status: 400 });
+  }
+
+  const sb = adminSupabase();
+  // 拿学生的 channel/store 顺手挂上 (跟后台创建保持一致)
+  const { data: student } = await sb.from("end_users")
+    .select("channel_id, store_id, status")
+    .eq("id", auth.payload.student_id).maybeSingle();
+  if (!student) return NextResponse.json({ ok: false, error: "学生不存在", code: "NOT_FOUND" }, { status: 404 });
+  if (student.status !== "active") {
+    return NextResponse.json({ ok: false, error: "账号已禁用", code: "ACCOUNT_DISABLED" }, { status: 403 });
+  }
+
+  const id = shortId("as");
+  const { data: created, error } = await sb.from("assignments")
+    .insert({
+      id,
+      end_user_id: auth.payload.student_id,
+      channel_id: student.channel_id,
+      store_id: student.store_id,
+      name,
+      subject,
+      task_type: "homework",
+      source: "student",
+      start_date: start,
+      end_date: end,
+      estimated_minutes: estimated,
+      cover_url: image_url,         // 一期: 图片作为封面; 二期 OCR 后此字段可能改成识别文字
+      content_md
+    })
+    .select("id, name, subject, task_type, source, start_date, end_date, estimated_minutes, cover_url, content_md, completed_at, created_at")
+    .single();
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message, code: "DB_ERROR" }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    task: {
+      ...created,
+      is_completed: !!(created as any).completed_at
+    }
   });
 }

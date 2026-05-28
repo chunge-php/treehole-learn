@@ -192,7 +192,7 @@ export async function quickFillAnswers(sessionId: string) {
 
   const { data: sess } = await sb
     .from("report_sessions")
-    .select("id, question_ids, total_questions, code")
+    .select("id, question_ids, total_questions, code, end_user_id")
     .eq("id", sessionId)
     .maybeSingle();
   if (!sess) throw new Error("记录不存在");
@@ -242,29 +242,65 @@ export async function quickFillAnswers(sessionId: string) {
   }).eq("id", sessionId);
 
   // 一键答完 → 立刻生成报告 + 同步学生档案, 把结果回传前端做 toast
-  let profileSync: { ok: boolean; message: string; fields: string[] } | null = null;
+  let profileSync: { ok: boolean; message: string; fields: string[]; diagnose?: any } | null = null;
   if (completed) {
     try {
-      await generateSessionReport(sessionId);
-      // 拿同步后的 user_profiles 看看实际有哪些字段填上了 (供前端展示)
-      const { data: prof } = await sb.from("user_profiles")
-        .select("basic, psychology, report_latest")
-        .eq("end_user_id", sess.end_user_id || "")
-        .maybeSingle();
-      const filled: string[] = [];
-      if ((prof as any)?.basic?.["学生类型"]) filled.push("basic.学生类型");
-      if ((prof as any)?.basic?.["八格类型"]) filled.push("basic.八格类型");
-      if ((prof as any)?.psychology?.["焦虑等级"]) filled.push("psychology.焦虑等级");
-      if ((prof as any)?.psychology?.["焦虑分数"]) filled.push("psychology.焦虑分数");
-      if ((prof as any)?.psychology?.["情绪"]) filled.push("psychology.情绪");
-      if ((prof as any)?.report_latest) filled.push("report_latest");
-      profileSync = {
-        ok: filled.length > 0,
-        message: filled.length > 0
-          ? `已同步 ${filled.length} 项到学生档案`
-          : "报告完成, 但未识别到可同步字段 (检查 end_user_id 是否关联)",
-        fields: filled
-      };
+      // 优先诊断 end_user 是否绑定
+      if (!sess.end_user_id) {
+        profileSync = {
+          ok: false,
+          message: "未关联学生 — 创建报告时没选 end_user_id, 删除该记录重建并选学生",
+          fields: []
+        };
+      } else {
+        await generateSessionReport(sessionId);
+        // 拿刚生成的 report_data 看实际有哪些维度
+        const { data: latestSess } = await sb.from("report_sessions")
+          .select("report_data, end_user_id").eq("id", sessionId).maybeSingle();
+        const rd: any = (latestSess as any)?.report_data || {};
+        const valuesPresent: string[] = [];
+        if (rd?.value1?.title) valuesPresent.push("value1 学生类型");
+        if (rd?.value3?.title) valuesPresent.push("value3 八格类型");
+        if (rd?.value4) valuesPresent.push("value4 焦虑等级");
+        if (Array.isArray(rd?.value5)) valuesPresent.push("value5 焦虑分数");
+        if (rd?.value8) valuesPresent.push("value8 兴趣六型");
+        if (rd?.value2) valuesPresent.push("value2 多元性向");
+
+        const { data: prof } = await sb.from("user_profiles")
+          .select("basic, psychology, report_latest")
+          .eq("end_user_id", sess.end_user_id)
+          .maybeSingle();
+        const filled: string[] = [];
+        if ((prof as any)?.basic?.["学生类型"]) filled.push("basic.学生类型");
+        if ((prof as any)?.basic?.["八格类型"]) filled.push("basic.八格类型");
+        if ((prof as any)?.psychology?.["焦虑等级"]) filled.push("psychology.焦虑等级");
+        if ((prof as any)?.psychology?.["焦虑分数"]) filled.push("psychology.焦虑分数");
+        if ((prof as any)?.psychology?.["情绪"]) filled.push("psychology.情绪");
+        if ((prof as any)?.report_latest) filled.push("report_latest");
+
+        if (filled.length > 0) {
+          profileSync = {
+            ok: true,
+            message: `已同步 ${filled.length} 项到学生档案 [${sess.end_user_id}]`,
+            fields: filled,
+            diagnose: { values_in_report: valuesPresent }
+          };
+        } else if (valuesPresent.length === 0) {
+          profileSync = {
+            ok: false,
+            message: `报告 report_data 没有 value1-value10 任一分析维度 (答题内容可能只触发了部分计算分支)`,
+            fields: [],
+            diagnose: { report_data_keys: Object.keys(rd) }
+          };
+        } else {
+          profileSync = {
+            ok: false,
+            message: `report_data 有 ${valuesPresent.join(", ")} 但 user_profiles 字段仍空 — 是 updateProfileFromReport 内部逻辑问题, 看服务端日志`,
+            fields: [],
+            diagnose: { values_in_report: valuesPresent }
+          };
+        }
+      }
     } catch (e: any) {
       console.error("[report] quickFill auto-finalize failed:", e);
       profileSync = { ok: false, message: `档案同步失败: ${e?.message || e}`, fields: [] };

@@ -46,13 +46,11 @@ export async function GET(req: Request) {
   ] = await Promise.all([
     sb.from("end_users").select("name, status").eq("id", studentId).maybeSingle(),
     sb.from("user_profiles").select("multimodal_latest, report_latest").eq("end_user_id", studentId).maybeSingle(),
-    // 今日是否做过学习力测评 (status=completed 且 completed_at 是今天)
+    // 是否曾经做过学习力测评 (一次性, 做过就再不显示卡; 后续重测从个人中心入口)
     sb.from("report_sessions")
-      .select("id, completed_at")
+      .select("id")
       .eq("end_user_id", studentId)
       .eq("status", "completed")
-      .gte("completed_at", `${todayStr}T00:00:00`)
-      .order("completed_at", { ascending: false })
       .limit(1),
     // 今日活动中的作业 (start_date <= today <= end_date)
     sb.from("assignments")
@@ -71,12 +69,14 @@ export async function GET(req: Request) {
   }
 
   const mm = (profile as any)?.multimodal_latest || null;
-  const evalDoneToday = Array.isArray(todaysEvalReport) && todaysEvalReport.length > 0;
-  const mmDoneToday = mm && isToday(mm.evaluated_at);
+  // 学习力测评是**一次性**的, 学生历史上做过就再不显示首页卡 (后续重测走个人中心入口)
+  const evalEverDone = Array.isArray(todaysEvalReport) && todaysEvalReport.length > 0;
+  // 人脸识别多模态是**每天**做的, 必须今天做才算
+  const mmDoneToday = !!(mm && isToday(mm.evaluated_at));
 
-  // 三态判断 (优先级: 测评 → 人脸识别 → 完成)
+  // 三态判断 (优先级: 历史测评 → 今日人脸 → 完成)
   let status: "no_eval" | "no_face" | "ready";
-  if (!evalDoneToday) status = "no_eval";
+  if (!evalEverDone) status = "no_eval";
   else if (!mmDoneToday) status = "no_face";
   else status = "ready";
 

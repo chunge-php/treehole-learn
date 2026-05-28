@@ -38,9 +38,10 @@
 | GET | `/api/app/me` | 获取当前登录学生信息(启动时校验 token) | ✅ |
 | GET | `/api/app/home/today` | 首页今日数据(三态机:测评卡 / 解锁卡 / 完整 3 卡) | ✅ |
 | POST | `/api/app/eval/start` | 开始学习力测评(返回会话 + 自动续答) | ✅ |
+| GET | `/api/app/eval/sessions` | **当前学生所有测评记录列表**(历史 + 进行中) | ✅ |
 | GET | `/api/app/eval/sessions/:id` | 拿测评会话详情(题目 + 已答 map) | ✅ |
 | POST | `/api/app/eval/sessions/:id/answer` | 提交单题作答(完成时自动同步学生档案) | ✅ |
-| GET | `/api/app/eval/sessions/:id/result` | 拿测评报告(value1..value10 结构) | ✅ |
+| GET | `/api/app/eval/sessions/:id/result` | 拿测评报告(value1..value10 结构,**用于自渲染**) | ✅ |
 
 > 后续接口陆续补充: 导学历日历、AI 聊天 SSE 流、心屿世界推荐、错题本、作文批改、人脸识别触发多模态等。
 
@@ -302,6 +303,34 @@ showAssignmentsCard(resp.data['assignments_summary']);
 - **可续答**:学生答到一半退出 App,再进时 `POST /api/app/eval/start` 会返回上次进行中的 `session_id` (resumed=true),`GET sessions/:id` 拿到题目和已答的 map,从中断点继续
 - **完成即生效**:最后一题答完瞬间,后端自动生成报告 + 同步学生档案的 `basic.学生类型 / basic.八格类型 / psychology.焦虑等级 / report_latest 等`,Profile 同步反馈在 `profile_synced` 字段里
 
+### 📄 报告详情 — 直接 WebView 嵌入公开页(推荐)
+
+后台已经实现完整的报告渲染页(`value1..value10` 全部显示 + **PDF 导出** + **分享**),**且无需登录**。App 端不要自己重新渲染报告,直接 WebView 加载这个公开页即可:
+
+```
+GET http://192.168.101.44:3006/report/<session_id>
+```
+
+- 任何人拿到 `session_id` 都能查看,无需 Authorization
+- 页面里内置「下载 PDF」「分享链接」按钮
+- session_id 由 `POST /api/app/eval/start` 返回,或 `GET /api/app/eval/sessions` 列表里取(列表中 `public_report_path` 字段就是 `/report/<id>`)
+- 仅当 session.status = `completed` 时可访问(进行中的 session 访问会跳 404)
+
+**App 端集成示例**(Flutter):
+```dart
+// 跳转报告详情页
+final sessionId = 'rs_xxx';
+final reportUrl = 'http://192.168.101.44:3006/report/$sessionId';
+// 用 webview_flutter / flutter_inappwebview 全屏打开
+Navigator.push(context, MaterialPageRoute(
+  builder: (_) => WebViewPage(url: reportUrl, title: '学习力报告')
+));
+```
+
+> 如果你**确实要自渲染**(比如想做原生 Flutter 报告页),也可以调 `GET /api/app/eval/sessions/:id/result` 拿 value1..value10 raw 数据自己渲染。但**强烈推荐 WebView 方案** — 报告样式复杂(图表/表格/14 大块),Flutter 重写工作量大且容易跟后台样式不一致。
+
+---
+
 ### POST `/api/app/eval/start` — 开始/恢复测评
 
 ```http
@@ -348,6 +377,77 @@ Authorization: Bearer <token>
 }
 ```
 HTTP 410。前端处理:跳到个人中心 → 学习力报告卡(直接显示 last_completed_session_id 的报告)。
+
+---
+
+### GET `/api/app/eval/sessions` — 当前学生测评记录列表
+
+App 个人中心「学习力报告」入口的列表展示用。返回该学生所有 (含进行中 + 已完成) 的测评 session 摘要。
+
+```http
+GET /api/app/eval/sessions?status=completed&limit=20
+Authorization: Bearer <token>
+```
+
+**Query 参数**:
+| 参数 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `status` | `completed` / `in_progress` / `all` | `all` | 状态过滤 |
+| `limit` | int | 20 | 上限 100,最近的优先 |
+
+**响应**:
+```jsonc
+{
+  "ok": true,
+  "sessions": [
+    {
+      "id": "rs_xxx",
+      "code": "XXL0000123",
+      "status": "completed",
+      "total_questions": 406,
+      "answered_count": 406,
+      "progress_pct": 100,
+      "completed_at": "2026-05-28T15:30:00.000Z",
+      "created_at": "2026-05-28T10:00:00.000Z",
+      "has_report": true,
+      "public_report_path": "/report/rs_xxx"   // 完成的会话才有, 拼上 baseUrl 直接 WebView 嵌入
+    },
+    {
+      "id": "rs_yyy",
+      "code": "XXL0000122",
+      "status": "in_progress",
+      "total_questions": 406,
+      "answered_count": 87,
+      "progress_pct": 21,
+      "completed_at": null,
+      "created_at": "2026-05-26T08:00:00.000Z",
+      "has_report": false,
+      "public_report_path": null
+    }
+  ]
+}
+```
+
+**前端集成**:
+```dart
+// 个人中心 → 学习力报告列表
+final list = await api.get('/api/app/eval/sessions?status=completed');
+ListView.builder(
+  itemCount: list['sessions'].length,
+  itemBuilder: (ctx, i) {
+    final s = list['sessions'][i];
+    return ListTile(
+      title: Text(s['code']),
+      subtitle: Text(s['completed_at']),
+      onTap: () {
+        // 点击 → WebView 打开公开报告页
+        final url = 'http://192.168.101.44:3006${s['public_report_path']}';
+        openWebView(url);
+      },
+    );
+  },
+);
+```
 
 ---
 

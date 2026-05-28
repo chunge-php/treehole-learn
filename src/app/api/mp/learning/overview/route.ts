@@ -78,25 +78,40 @@ function sample13(arr: number[]): number[] {
 const CLOUD_COLORS = ["#1490ff", "#ff6a00", "#3CA272", "#73C0DE", "#FAC858", "#EE6666"];
 
 /**
- * 关键词云 — 居中向外扩散布局 (黄金角螺旋)
- *   - 第 0 个 (最重要) 在中心, 字号最大
- *   - 后续按 √i × step 半径递增, 黄金角 137.5° 转动
- *   - 字号 56 → 22 渐变
- *   - 简易碰撞: 估算文字宽度后 x 居中偏移, 越界裁剪
+ * 关键词云 — 居中向外随机扩散
+ *   - 第 0 个最重要, 落在画布正中, 字号最大
+ *   - 后续按词文本 hash 做种子, 角度 0~2π 随机, 半径随 i 递增 ± 抖动
+ *   - 同词永远落同位置 (hash 稳定), 每次请求布局不变
+ *   - 字号 60 → 22 渐变, 越外圈字越小
+ *   - 越界裁剪到画布内
  * 画布按前端 .cloud-zone 100% × 440rpx 推算约 480 × 400
  */
 function layoutCloudWords(words: string[]): Array<{ text: string; size: number; color: string; x: number; y: number }> {
   const CW = 480, CH = 400;
   const CX = CW / 2, CY = CH / 2;
-  const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+  // 文本 → [0,1) 稳定 hash, 当随机种子用
+  const hash01 = (s: string, salt = 0) => {
+    let h = 2166136261 ^ salt;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return ((h >>> 0) % 10000) / 10000;
+  };
   return words.map((text, i) => {
-    const radius = i === 0 ? 0 : Math.sqrt(i) * 40;
-    const angle = i * GOLDEN;
     const size = Math.max(22, 60 - i * 4);
-    // 中文每字宽 ≈ font-size, 英文/数字 ≈ 0.55 × font-size; 这里简单按字符数 × size × 0.95 估算
     const approxW = text.length * size * 0.95;
-    const cx = CX + radius * Math.cos(angle);
-    const cy = CY + radius * Math.sin(angle);
+    let cx: number, cy: number;
+    if (i === 0) {
+      cx = CX; cy = CY;
+    } else {
+      const angle = hash01(text, 17) * Math.PI * 2;
+      const baseRadius = 30 + i * 14;                     // 基础半径随 i 递增
+      const jitter = 0.7 + hash01(text, 31) * 0.6;        // 0.7 ~ 1.3 之间抖动避免环
+      const radius = baseRadius * jitter;
+      cx = CX + radius * Math.cos(angle);
+      cy = CY + radius * Math.sin(angle);
+    }
     const x = Math.max(8, Math.min(CW - approxW - 8, cx - approxW / 2));
     const y = Math.max(8, Math.min(CH - size - 8, cy - size / 2));
     return {

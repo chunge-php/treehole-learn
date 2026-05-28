@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Send, Eraser, Loader2, MessageSquare, Sparkles, AlertTriangle, Bot, User, FileText } from "lucide-react";
+import { Send, Eraser, Loader2, MessageSquare, Sparkles, AlertTriangle, Bot, User, FileText, ImagePlus, X } from "lucide-react";
 import { buildSystemPrompt, type ChatBootstrap } from "../actions";
 import { MarkdownView } from "@/components/admin/MarkdownView";
+import { uploadFile } from "@/lib/upload";
 import { toast } from "sonner";
 
-type Msg = { role: "user" | "assistant"; content: string; streaming?: boolean; profileUpdated?: string[] };
+type Msg = { role: "user" | "assistant"; content: string; streaming?: boolean; profileUpdated?: string[]; imageUrl?: string };
 
 export function AiChatClient({ data }: { data: ChatBootstrap }) {
   const [studentId, setStudentId] = useState("");
@@ -22,8 +23,29 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
   const [systemPromptPreview, setSystemPromptPreview] = useState<{ system_role: string; prefix_rendered: string; rules: string; full: string } | null>(null);
   const [previewing, startPreview] = useTransition();
   const [sending, setSending] = useState(false);
+  const [pendingImage, setPendingImage] = useState<{ url: string; name: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  async function pickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";   // 允许同一文件再选
+    if (!f) return;
+    if (!f.type.startsWith("image/")) { toast.error("请选择图片文件"); return; }
+    if (f.size > 10 * 1024 * 1024) { toast.error("图片不能超过 10MB"); return; }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      fd.append("prefix", "chat");
+      const r = await uploadFile(fd);
+      if (!r.ok || !r.url) throw new Error(r.error || "上传失败");
+      setPendingImage({ url: r.url, name: f.name });
+    } catch (e: any) { toast.error(e?.message || "上传失败"); }
+    finally { setUploading(false); }
+  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -43,10 +65,11 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
   async function send() {
     if (!studentId) { toast.error("请先选学生"); return; }
     if (!templateId) { toast.error("请先选模板"); return; }
-    if (!input.trim()) return;
+    if (!input.trim() && !pendingImage) return;
     if (sending) return;
 
     const userMessage = input.trim();
+    const usingImage = pendingImage;
     const history = messages.map(m => ({ role: m.role, content: m.content }));
 
     // 用 setMessages 内部计算 assistantIdx, 锁定本次 SSE 流要更新哪条气泡
@@ -54,9 +77,14 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
     let assistantIdx = -1;
     setMessages(prev => {
       assistantIdx = prev.length + 1;
-      return [...prev, { role: "user", content: userMessage }, { role: "assistant", content: "", streaming: true }];
+      return [
+        ...prev,
+        { role: "user", content: userMessage, imageUrl: usingImage?.url },
+        { role: "assistant", content: "", streaming: true }
+      ];
     });
     setInput("");
+    setPendingImage(null);
     setSending(true);
 
     const ctrl = new AbortController();
@@ -67,7 +95,13 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
       const resp = await fetch("/api/admin/coze-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ end_user_id: studentId, template_id: templateId, user_message: userMessage, history }),
+        body: JSON.stringify({
+          end_user_id: studentId,
+          template_id: templateId,
+          user_message: userMessage,
+          image_url: usingImage?.url || "",
+          history
+        }),
         signal: ctrl.signal
       });
       if (!resp.ok || !resp.body) {
@@ -199,20 +233,45 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
                 <Bubble key={i} msg={m} />
               ))}
             </div>
+            {/* 待发送图片预览 */}
+            {pendingImage && (
+              <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-2">
+                <img src={pendingImage.url} alt="" className="h-12 w-12 rounded object-cover" />
+                <div className="flex-1 min-w-0 text-xs">
+                  <div className="truncate font-medium">{pendingImage.name}</div>
+                  <div className="text-muted-foreground">将随消息一起发送</div>
+                </div>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPendingImage(null)}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
             <div className="flex items-end gap-2">
+              {/* 上传图片按钮 */}
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={pickImage} />
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0 h-[60px] w-10"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending || uploading}
+                title="上传图片 (题目截图/拍照)"
+              >
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+              </Button>
               <Textarea
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                 }}
-                placeholder="输入问题, Enter 发送; Shift+Enter 换行"
+                placeholder={pendingImage ? "可选: 给图片配一段提问 (留空直接看图说话)" : "输入问题, Enter 发送; Shift+Enter 换行"}
                 rows={2}
                 className="resize-none"
                 disabled={sending}
               />
               <div className="flex flex-col gap-2">
-                <Button onClick={send} disabled={sending || !input.trim() || !studentId}>
+                <Button onClick={send} disabled={sending || (!input.trim() && !pendingImage) || !studentId}>
                   {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   发送
                 </Button>
@@ -264,8 +323,13 @@ function Bubble({ msg }: { msg: Msg }) {
         {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
       </div>
       <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm ${isUser ? "bg-primary text-primary-foreground whitespace-pre-wrap" : "bg-card border"}`}>
+        {isUser && msg.imageUrl && (
+          <a href={msg.imageUrl} target="_blank" rel="noreferrer" className="block mb-2">
+            <img src={msg.imageUrl} alt="" className="max-h-48 max-w-full rounded-lg border-2 border-primary-foreground/20 cursor-zoom-in hover:opacity-90 transition" />
+          </a>
+        )}
         {isUser ? (
-          msg.content
+          msg.content || (msg.imageUrl ? <span className="italic opacity-80">[图片]</span> : null)
         ) : msg.content ? (
           <MarkdownView content={msg.content} />
         ) : msg.streaming ? (

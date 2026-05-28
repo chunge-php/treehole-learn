@@ -91,9 +91,10 @@ export async function POST(req: NextRequest) {
   const endUserId = String(body.end_user_id || "");
   const templateId = String(body.template_id || "");
   const userMessage = String(body.user_message || "");
+  const imageUrl = String(body.image_url || "");
   const history = Array.isArray(body.history) ? body.history : [];
-  if (!endUserId || !templateId || !userMessage) {
-    return new Response("缺少 end_user_id / template_id / user_message", { status: 400 });
+  if (!endUserId || !templateId || (!userMessage && !imageUrl)) {
+    return new Response("缺少 end_user_id / template_id, user_message 和 image_url 至少有一个", { status: 400 });
   }
 
   const workflowId = process.env.COZE_WORKFLOW_AI_TUTOR || "";
@@ -130,9 +131,10 @@ export async function POST(req: NextRequest) {
           workflowId,
           parameters: {
             system_prompt: systemPrompt,
-            user_message: userMessage,
+            user_message: userMessage || "(看图说话)",
             history: historyText,
             student_name: studentName,
+            ...(imageUrl ? { image: imageUrl } : {})    // 扣子 image 字段, 直接传公网 URL
           }
         })) {
           if (evt.type === "delta") {

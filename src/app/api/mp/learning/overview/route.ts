@@ -149,11 +149,15 @@ export async function GET(req: Request) {
   }
 
   // radar — multimodal_latest 三维度
+  // 顺序对齐前端 SVG 三轴标签 (顶=专注程度 / 右下=情绪状态 / 左下=学习压力):
+  //   i=0 → concentration (专注)
+  //   i=1 → status        (学习状态综合, 即"情绪状态")
+  //   i=2 → stress         (抗压力, 即"学习压力")
   const mm: any = (profile as any)?.multimodal_latest || {};
   const radarData = [
     mm?.dimensions?.concentration ?? 0,
-    mm?.dimensions?.stress ?? 0,
-    mm?.dimensions?.status ?? 0
+    mm?.dimensions?.status ?? 0,
+    mm?.dimensions?.stress ?? 0
   ];
 
   // cloud_words — 从 11 项分值查表 (一期固定布局, 二期前端可改用词云组件)

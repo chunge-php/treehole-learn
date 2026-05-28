@@ -25,18 +25,8 @@ insert into stores (id, channel_id, name, province, city, district, address, con
   ('st_demo_sh02a', 'ch_demo_sh02', '张江总店', '上海市', '上海市', '浦东新区', '张江高科技园8号', '赵敏', '13900139003', 4)
 on conflict (id) do nothing;
 
--- 顶级类型
-insert into top_types (id, parent_id, name, sort_order) values
-  ('tt_learn_root', null, '学习能力', 1),
-  ('tt_emo_root', null, '情绪管理', 2)
-on conflict (id) do nothing;
-
-insert into top_types (id, parent_id, name, sort_order) values
-  ('tt_learn_atti', 'tt_learn_root', '学习态度', 1),
-  ('tt_learn_meth', 'tt_learn_root', '学习方法', 2),
-  ('tt_learn_abil', 'tt_learn_root', '学习能力', 3),
-  ('tt_learn_habi', 'tt_learn_root', '学习习惯', 4)
-on conflict (id) do nothing;
+-- 顶级类型: 走 migration 20260528000025_top_types_resource_seed.sql 统一种 (3 一级 + 8 二级)
+-- 旧的「学习能力 / 情绪管理」顶级 + 子集已弃用 (见 20260528000026 migration 清理)
 
 -- 小程序协议 (用户协议 / 隐私协议) — 默认可过审模板, 后台可在「设置→协议管理」修改
 insert into agreements (id, type, title, content, version) values

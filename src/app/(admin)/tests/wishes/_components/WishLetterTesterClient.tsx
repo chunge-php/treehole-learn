@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,8 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { previewLetterContext, runLetterGeneration, saveWishLetter, type StudentOpt } from "../actions";
-import { Wand2, FileText, Save, Loader2, Mail, Eye } from "lucide-react";
+import { previewLetterContext, runLetterGeneration, saveWishLetter, listWishItems, addTestWishItem, deleteWishItem, type StudentOpt } from "../actions";
+import { Wand2, FileText, Save, Loader2, Mail, Eye, Plus, Trash2, ListTodo } from "lucide-react";
 import { toast } from "sonner";
 
 export function WishLetterTesterClient({
@@ -23,9 +23,49 @@ export function WishLetterTesterClient({
   const [rendered, setRendered] = useState("");
   const [tplMeta, setTplMeta] = useState<{ name?: string; system_role?: string; rules?: string }>({});
 
+  const [items, setItems] = useState<Array<{ id: string; content: string; createdAt: string }>>([]);
+  const [newWish, setNewWish] = useState("");
+
   const [previewing, startPreview] = useTransition();
   const [running, startRun] = useTransition();
   const [saving, startSave] = useTransition();
+  const [loadingItems, startLoadItems] = useTransition();
+  const [adding, startAdd] = useTransition();
+
+  function refreshItems() {
+    if (!studentId) { setItems([]); return; }
+    startLoadItems(async () => {
+      try {
+        const list = await listWishItems({ endUserId: studentId, year, month });
+        setItems(list);
+      } catch (e: any) { toast.error(e?.message || "拉心愿条目失败"); }
+    });
+  }
+
+  function addWish() {
+    if (!studentId) { toast.error("请先选择学生"); return; }
+    if (!newWish.trim()) { toast.error("写一条心愿"); return; }
+    startAdd(async () => {
+      try {
+        await addTestWishItem({ endUserId: studentId, content: newWish.trim(), year, month });
+        setNewWish("");
+        refreshItems();
+        toast.success("已加入心愿条目");
+      } catch (e: any) { toast.error(e?.message || "添加失败"); }
+    });
+  }
+
+  function removeWish(id: string) {
+    startAdd(async () => {
+      try {
+        await deleteWishItem({ id });
+        refreshItems();
+      } catch (e: any) { toast.error(e?.message || "删除失败"); }
+    });
+  }
+
+  // 学生/年/月 变化时自动刷新心愿条目
+  useEffect(() => { refreshItems(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [studentId, year, month]);
 
   function preview() {
     if (!studentId) { toast.error("请先选择学生"); return; }
@@ -154,6 +194,53 @@ export function WishLetterTesterClient({
           {meta.mock && <Badge variant="outline" className="ml-2">⚠ Mock 模式 (扣子未配置)</Badge>}
           {meta.debugUrl && <a href={meta.debugUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline self-center">扣子调试链接</a>}
         </div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <ListTodo className="h-4 w-4" />
+            本月学生提出的心愿条目
+            <Badge variant="secondary">{items.length} 条</Badge>
+            {loadingItems && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+          </div>
+          <span className="text-xs text-muted-foreground">扣子生成信件时会读取这些</span>
+        </div>
+
+        <div className="flex gap-2 mb-3">
+          <Input
+            value={newWish}
+            onChange={(e) => setNewWish(e.target.value)}
+            placeholder="例如: 我想要一本《盗墓笔记》全集 / 想去长白山看看 / 这个周末别让我补课"
+            maxLength={300}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addWish(); } }}
+            disabled={!studentId}
+          />
+          <Button onClick={addWish} disabled={adding || !studentId || !newWish.trim()}>
+            {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          </Button>
+        </div>
+
+        {items.length > 0 ? (
+          <div className="space-y-1.5">
+            {items.map((w, i) => (
+              <div key={w.id} className="flex items-center gap-2 text-sm bg-muted/40 rounded px-3 py-2">
+                <span className="text-xs text-muted-foreground w-6">{i + 1}.</span>
+                <span className="flex-1">{w.content}</span>
+                <span className="text-xs text-muted-foreground">{new Date(w.createdAt).toLocaleDateString()}</span>
+                <Button size="sm" variant="ghost" onClick={() => removeWish(w.id)} className="h-6 w-6 p-0 text-destructive hover:text-destructive">
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : studentId ? (
+          <div className="text-xs text-muted-foreground text-center py-4 italic">
+            该学生本月还没有心愿. 试着写一条 (会按学生第一人称写进信里)
+          </div>
+        ) : (
+          <div className="text-xs text-muted-foreground text-center py-4 italic">先选学生</div>
+        )}
       </Card>
 
       <Tabs defaultValue="letter">

@@ -58,7 +58,7 @@ function summarizeMultimodal(mm: any): string {
   return `专注 ${dim.concentration ?? "-"} · 抗压 ${dim.stress ?? "-"} · 状态 ${dim.status ?? "-"} · 综合 ${mm?.composite ?? "-"} · 状态标签: ${mm?.state_label ?? "-"}`;
 }
 
-/** 拉学生档案 + 渲染上下文 */
+/** 拉学生档案 + 本月心愿条目 + 渲染上下文 */
 export async function buildLetterContext(input: {
   endUserId: string;
   year: number;
@@ -66,10 +66,22 @@ export async function buildLetterContext(input: {
   template: LetterTemplate;
 }): Promise<LetterContext> {
   const sb = adminSupabase();
-  const [{ data: stu }, { data: prof }] = await Promise.all([
+  const monthStart = new Date(input.year, input.month - 1, 1, 0, 0, 0, 0).toISOString();
+  const monthEnd   = new Date(input.year, input.month,     1, 0, 0, 0, 0).toISOString();
+  const [{ data: stu }, { data: prof }, { data: items }] = await Promise.all([
     sb.from("end_users").select("name, grade").eq("id", input.endUserId).maybeSingle(),
-    sb.from("user_profiles").select("basic, knowledge, courses, today_state, psychology, ai_history, multimodal_latest, report_latest").eq("end_user_id", input.endUserId).maybeSingle()
+    sb.from("user_profiles").select("basic, knowledge, courses, today_state, psychology, ai_history, multimodal_latest, report_latest").eq("end_user_id", input.endUserId).maybeSingle(),
+    sb.from("student_wish_items")
+      .select("content, created_at")
+      .eq("end_user_id", input.endUserId)
+      .gte("created_at", monthStart)
+      .lt("created_at", monthEnd)
+      .order("created_at", { ascending: true })
   ]);
+  const wishItems = (items || []) as Array<{ content: string; created_at: string }>;
+  const wishList = wishItems.length === 0
+    ? "(本月学生暂未提出具体心愿)"
+    : wishItems.map((w, i) => `${i + 1}. ${w.content}`).join("\n");
   const basic: any = (prof as any)?.basic || {};
   const know: any = (prof as any)?.knowledge || {};
   const courses: any = (prof as any)?.courses || {};
@@ -104,7 +116,11 @@ export async function buildLetterContext(input: {
     "兴趣说明": basic["兴趣说明"] || "",
 
     "ai互动话题": ai["话题"] || ai["高频提问"] || "",
-    "ai情绪摘要": ai["情绪倾诉"] || ai["历史反馈"] || ""
+    "ai情绪摘要": ai["情绪倾诉"] || ai["历史反馈"] || "",
+
+    // 本月学生在 App 端零散输入的心愿条目, 由扣子参考写进信里的"愿望与诉求"段
+    "本月心愿明细": wishList,
+    "本月心愿条数": String(wishItems.length)
   };
 
   const rendered = renderTemplate(input.template.prefix_template, placeholders);

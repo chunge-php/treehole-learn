@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const BASE = "http://shudong.nietzsci.com";
+const BASE = "https://xxl.fazhanmao.com";   // 旧项目域名 (仅国内可访问, 用于一次性迁数据)
 const OUT_DIR = path.join(ROOT, "public");
 
 // 从 SQL dump 提取的所有 cover_url + file_url (37 个 URL: 23 封面 + 14 视频/音频)

@@ -6,10 +6,10 @@
 
 | 环境 | Base URL |
 |---|---|
-| **生产** | `https://xxl.fazhanmao.com` |
-| 本地开发(同局域网) | `http://192.168.101.44:3006` |
+| **本地开发**(同局域网) | `http://192.168.101.44:3006` |
+| 生产 | 待部署(域名后续告知) |
 
-所有接口路径在 baseUrl 后拼,例如 `https://xxl.fazhanmao.com/api/app/auth/login`。
+所有接口路径在 baseUrl 后拼,例如 `http://192.168.101.44:3006/api/app/auth/login`。
 
 ## 基础约定
 
@@ -317,7 +317,7 @@ showAssignmentsCard(resp.data['assignments_summary']);
 后台已经实现完整的报告渲染页(`value1..value10` 全部显示 + **PDF 导出** + **分享**),**且无需登录**。App 端不要自己重新渲染报告,直接 WebView 加载这个公开页即可:
 
 ```
-GET https://xxl.fazhanmao.com/report/<session_id>
+GET http://192.168.101.44:3006/report/<session_id>
 ```
 
 - 任何人拿到 `session_id` 都能查看,无需 Authorization
@@ -329,7 +329,7 @@ GET https://xxl.fazhanmao.com/report/<session_id>
 ```dart
 // 跳转报告详情页
 final sessionId = 'rs_xxx';
-final reportUrl = 'https://xxl.fazhanmao.com/report/$sessionId';
+final reportUrl = 'http://192.168.101.44:3006/report/$sessionId';
 // 用 webview_flutter / flutter_inappwebview 全屏打开
 Navigator.push(context, MaterialPageRoute(
   builder: (_) => WebViewPage(url: reportUrl, title: '学习力报告')
@@ -450,7 +450,7 @@ ListView.builder(
       subtitle: Text(s['completed_at']),
       onTap: () {
         // 点击 → WebView 打开公开报告页
-        final url = 'https://xxl.fazhanmao.com${s['public_report_path']}';
+        final url = 'http://192.168.101.44:3006${s['public_report_path']}';
         openWebView(url);
       },
     );
@@ -666,7 +666,7 @@ renderReport(result['report']);   // 用 value1..value10 渲染
 ## 联调说明
 
 ### 测试环境
-- 开发服务器:`https://xxl.fazhanmao.com`(局域网)
+- 开发服务器:`http://192.168.101.44:3006`(局域网)
 - 平板/小程序连这个 IP 直接联调
 - 没部署到公网前,扣子相关图片接口走后端中转(已处理)
 

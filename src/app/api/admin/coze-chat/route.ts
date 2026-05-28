@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
             user_message: userMessage || "(看图说话)",
             history: historyText,
             student_name: studentName,
-            ...(cozeImageParam ? { image: cozeImageParam } : {})
+            ...(cozeImageParam ? { image_url: cozeImageParam } : {})
           }
         })) {
           if (evt.type === "delta") {

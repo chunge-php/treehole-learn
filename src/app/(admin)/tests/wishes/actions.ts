@@ -2,6 +2,7 @@
 import { adminSupabase } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth";
 import { generateLetter, loadLetterTemplate, buildLetterContext } from "@/lib/wish-letter";
+import { runProfileExtract } from "@/lib/profile/extract";
 import { shortId } from "@/lib/utils";
 
 /** 列出指定学生当月的心愿条目 (测试中心展示用) */
@@ -102,7 +103,7 @@ export async function runLetterGeneration(input: { endUserId: string; year: numb
   };
 }
 
-/** 把生成的信件保存到 student_wishes 表 (家长立刻能在心愿清单里看到) */
+/** 把生成的信件保存到 student_wishes 表 + 跑 profile_extract 回写档案 */
 export async function saveWishLetter(input: {
   endUserId: string; year: number; month: number; content: string; title?: string;
 }) {
@@ -122,6 +123,19 @@ export async function saveWishLetter(input: {
   };
   const { error } = await sb.from("student_wishes").insert(row);
   if (error) throw new Error(error.message);
-  void s;
-  return { ok: true, id: row.id };
+
+  // 信件作为该学生当月状态的浓缩, 跑一遍 profile_extract 把里面的兴趣 / 情绪 /
+  // 学习状态等结构化字段合并回 user_profiles. 走串行队列防数据竞争, 失败不影响保存.
+  let changedFields: string[] = [];
+  try {
+    changedFields = await runProfileExtract({
+      endUserId: input.endUserId,
+      userMessage: `请为该学生撰写 ${input.year} 年 ${input.month} 月的月度家长信`,
+      assistantMessage: input.content,
+      by: (s as any).account_id || null
+    });
+  } catch (e: any) {
+    console.error("[wish-letter] profile extract failed:", e?.message || e);
+  }
+  return { ok: true, id: row.id, profileChangedFields: changedFields };
 }

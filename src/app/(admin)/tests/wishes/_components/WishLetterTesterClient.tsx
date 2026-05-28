@@ -143,8 +143,15 @@ export function WishLetterTesterClient({
     if (!content.trim()) { toast.error("先生成或手填一段正文"); return; }
     startSave(async () => {
       try {
-        await saveWishLetter({ endUserId: studentId, year, month, content: content.trim() });
-        toast.success(`已写入信件库 (${meta.studentName || "该学生"} · ${year}年${String(month).padStart(2, "0")}月)`);
+        const r = await saveWishLetter({ endUserId: studentId, year, month, content: content.trim() });
+        const stamp = `${year}年${String(month).padStart(2, "0")}月`;
+        toast.success(`已写入信件库 (${meta.studentName || "该学生"} · ${stamp})`);
+        const fields = r.profileChangedFields || [];
+        if (fields.length > 0) {
+          toast.success(`档案已回写 ${fields.length} 项: ${fields.slice(0, 4).join(", ")}${fields.length > 4 ? " ..." : ""}`);
+        } else {
+          toast.info("档案回写: 0 字段变更 (扣子未配置 / 内容已无新信息)");
+        }
       } catch (e: any) { toast.error(e?.message || "保存失败"); }
     });
   }

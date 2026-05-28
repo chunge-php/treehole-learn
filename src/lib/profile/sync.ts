@@ -137,6 +137,90 @@ export async function updateProfileFromReport(input: {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * 把扣子档案分析工作流返回的 JSON, 深度合并到 user_profiles 各分片
+ *  - basic / today_state / psychology 标量字段: 新值覆盖
+ *  - knowledge.mastered/weak/blind 数组字段: 追加去重 (兼容 weak_points 等模型自由发挥的别名)
+ *  - ai_history 字段: 忽略 (该字段由 updateProfileFromChat 维护, 避免污染 recent_chats)
+ *  - 未知顶层 key: 忽略 (避免污染表结构)
+ *  返回本次实际写入的字段路径列表 (供前端 toast 提示)
+ */
+export async function mergeProfileUpdate(input: {
+  end_user_id: string;
+  update: any;
+  by?: string | null;
+}): Promise<string[]> {
+  const sb = adminSupabase();
+  const { end_user_id, update, by = null } = input;
+  if (!update || typeof update !== "object") return [];
+
+  const { data: cur } = await sb.from("user_profiles")
+    .select("basic, knowledge, psychology, today_state")
+    .eq("end_user_id", end_user_id).maybeSingle();
+
+  const basic       = { ...(cur?.basic       || {}) };
+  const knowledge   = { ...(cur?.knowledge   || {}) };
+  const psychology  = { ...(cur?.psychology  || {}) };
+  const today_state = { ...(cur?.today_state || {}) };
+
+  const changed: string[] = [];
+
+  // basic: 简单覆盖
+  if (update.basic && typeof update.basic === "object") {
+    for (const [k, v] of Object.entries(update.basic)) {
+      if (v == null || v === "") continue;
+      if (basic[k] !== v) { basic[k] = v; changed.push(`basic.${k}`); }
+    }
+  }
+
+  // knowledge: 三个数组字段, 追加去重; 兼容别名 weak_points/mastered_points/blind_points
+  if (update.knowledge && typeof update.knowledge === "object") {
+    const aliasMap: Record<string, "mastered" | "weak" | "blind"> = {
+      mastered: "mastered", mastered_points: "mastered",
+      weak: "weak", weak_points: "weak", weaknesses: "weak",
+      blind: "blind", blind_points: "blind", blind_spots: "blind"
+    };
+    for (const [rawKey, rawVal] of Object.entries(update.knowledge)) {
+      const target = aliasMap[rawKey];
+      if (!target) continue;
+      const arr: string[] = Array.isArray(rawVal) ? rawVal : (typeof rawVal === "string" ? [rawVal] : []);
+      const existing: string[] = Array.isArray(knowledge[target]) ? knowledge[target] : [];
+      const merged = Array.from(new Set([...existing, ...arr.filter(x => typeof x === "string" && x.trim())]));
+      if (merged.length !== existing.length) {
+        knowledge[target] = merged;
+        changed.push(`knowledge.${target}`);
+      }
+    }
+  }
+
+  // psychology: 标量覆盖
+  if (update.psychology && typeof update.psychology === "object") {
+    for (const [k, v] of Object.entries(update.psychology)) {
+      if (v == null || v === "") continue;
+      if (psychology[k] !== v) { psychology[k] = v; changed.push(`psychology.${k}`); }
+    }
+  }
+
+  // today_state: 标量覆盖
+  if (update.today_state && typeof update.today_state === "object") {
+    for (const [k, v] of Object.entries(update.today_state)) {
+      if (v == null || v === "") continue;
+      if (today_state[k] !== v) { today_state[k] = v; changed.push(`today_state.${k}`); }
+    }
+  }
+
+  if (changed.length === 0) return [];
+
+  const { error } = await sb.from("user_profiles").upsert({
+    end_user_id,
+    basic, knowledge, psychology, today_state,
+    updated_by: by,
+    updated_at: new Date().toISOString()
+  }, { onConflict: "end_user_id" });
+  if (error) throw new Error(error.message);
+  return changed;
+}
+
 /** AI 聊天完成一轮 → 累积到 ai_history (滑动窗口 20 条 + 计数 + 最近时间) */
 export async function updateProfileFromChat(input: {
   end_user_id: string;

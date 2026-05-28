@@ -12,7 +12,7 @@ import { buildSystemPrompt, type ChatBootstrap } from "../actions";
 import { MarkdownView } from "@/components/admin/MarkdownView";
 import { toast } from "sonner";
 
-type Msg = { role: "user" | "assistant"; content: string; streaming?: boolean };
+type Msg = { role: "user" | "assistant"; content: string; streaming?: boolean; profileUpdated?: string[] };
 
 export function AiChatClient({ data }: { data: ChatBootstrap }) {
   const [studentId, setStudentId] = useState("");
@@ -84,6 +84,19 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
               { ...prev[i], streaming: false }
             ];
           });
+        } else if (event === "profile_updated") {
+          const fields: string[] = Array.isArray(data?.fields) ? data.fields : [];
+          if (fields.length > 0) {
+            setMessages(prev => {
+              const i = prev.length - 1;
+              if (i < 0 || prev[i].role !== "assistant") return prev;
+              return [
+                ...prev.slice(0, i),
+                { ...prev[i], profileUpdated: fields }
+              ];
+            });
+            toast.success(`📋 档案已更新: ${fields.slice(0, 3).join(", ")}${fields.length > 3 ? ` 等 ${fields.length} 项` : ""}`);
+          }
         } else if (event === "error") {
           setMessages(prev => {
             const i = prev.length - 1;
@@ -257,6 +270,17 @@ function Bubble({ msg }: { msg: Msg }) {
         ) : null}
         {!isUser && msg.streaming && msg.content && (
           <span className="inline-block w-1.5 h-3 align-middle ml-0.5 bg-primary animate-pulse rounded-sm" />
+        )}
+        {!isUser && !msg.streaming && msg.profileUpdated && msg.profileUpdated.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-border/50 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+            <Sparkles className="h-3 w-3 mt-0.5 text-primary shrink-0" />
+            <div>
+              <span className="font-medium text-primary">档案已更新</span>:&nbsp;
+              {msg.profileUpdated.map(f => (
+                <code key={f} className="mx-0.5 rounded bg-primary/10 px-1 py-px text-[10px] text-primary">{f}</code>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

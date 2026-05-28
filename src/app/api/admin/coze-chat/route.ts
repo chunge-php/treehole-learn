@@ -9,12 +9,72 @@
  */
 import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { streamWorkflow } from "@/lib/coze/client";
+import { streamWorkflow, runWorkflow } from "@/lib/coze/client";
 import { buildSystemPrompt } from "@/app/(admin)/tests/ai-chat/actions";
-import { updateProfileFromChat } from "@/lib/profile/sync";
+import { updateProfileFromChat, mergeProfileUpdate } from "@/lib/profile/sync";
+import { adminSupabase } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/** 调用扣子第二个工作流抽取学生档案更新, 合并到 user_profiles, 返回变更的字段路径列表 */
+async function runProfileExtract(args: {
+  endUserId: string;
+  userMessage: string;
+  assistantMessage: string;
+  adminId: string | null;
+}): Promise<string[]> {
+  const workflowId = process.env.COZE_WORKFLOW_PROFILE_EXTRACT || "";
+  if (!workflowId) return [];      // 未配置 → 跳过, 不报错
+
+  const sb = adminSupabase();
+  // 取模板的 system_role 作为分析 prompt
+  const { data: tpl } = await sb.from("prompt_templates")
+    .select("system_role").eq("code", "profile_extract").eq("is_active", true).maybeSingle();
+  if (!tpl?.system_role) return [];  // 没模板 → 跳过
+
+  // 取学生名
+  const { data: eu } = await sb.from("end_users")
+    .select("name").eq("id", args.endUserId).maybeSingle();
+
+  let parsed: any = null;
+  try {
+    const res = await runWorkflow({
+      workflowId,
+      parameters: {
+        system_prompt: tpl.system_role,
+        student_name: (eu as any)?.name || "",
+        user_message: args.userMessage,
+        assistant_message: args.assistantMessage
+      }
+    });
+    // 扣子返回 data 已被 client 解析过一层, 此处 data 可能是 {output: "..."} 或 {output: {...}}
+    let raw: any = res.data;
+    if (raw && typeof raw === "object" && "output" in raw) raw = (raw as any).output;
+    if (typeof raw === "string") {
+      // 去掉可能的 ```json ... ``` 包裹
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+      try { parsed = JSON.parse(cleaned); } catch {}
+    } else if (raw && typeof raw === "object") {
+      parsed = raw;
+    }
+  } catch (e: any) {
+    console.error("[profile-extract] workflow call failed:", e?.message || e);
+    return [];
+  }
+  if (!parsed) return [];
+
+  try {
+    return await mergeProfileUpdate({
+      end_user_id: args.endUserId,
+      update: parsed,
+      by: args.adminId
+    });
+  } catch (e: any) {
+    console.error("[profile-extract] merge failed:", e?.message || e);
+    return [];
+  }
+}
 
 export async function POST(req: NextRequest) {
   let adminId: string | null = null;
@@ -89,16 +149,27 @@ export async function POST(req: NextRequest) {
               full = String(t);
               send("delta", { text: full });
             }
-            send("done", { full });
-            // fire-and-forget 回写学生档案 (失败不影响响应)
+
+            // 同步 await 完成档案抽取 + merge, 让前端收到 profile_updated 后再收 done
             if (full) {
-              updateProfileFromChat({
-                end_user_id: endUserId,
-                user_message: userMessage,
-                assistant_message: full,
-                by: adminId
-              }).catch(e => console.error("[ai-chat] profile sync failed:", e?.message || e));
+              try {
+                await updateProfileFromChat({
+                  end_user_id: endUserId,
+                  user_message: userMessage,
+                  assistant_message: full,
+                  by: adminId
+                });
+                const changedFields = await runProfileExtract({
+                  endUserId, userMessage, assistantMessage: full, adminId
+                });
+                if (changedFields.length > 0) {
+                  send("profile_updated", { fields: changedFields });
+                }
+              } catch (e: any) {
+                console.error("[ai-chat] post-stream sync error:", e?.message || e);
+              }
             }
+            send("done", { full });
             controller.close();
             return;
           } else if (evt.type === "error") {

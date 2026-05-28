@@ -60,7 +60,11 @@ export async function GET(req: Request) {
       .order("created_at", { ascending: false })
       .limit(50);
     if (error) throw new Error(error.message);
-    console.log("[mp/wishes] child:", child.id, "rows:", (data || []).length, error ? "ERR=" + JSON.stringify(error) : "");
+
+    // 临时 debug: 直接试一遍不带 order 的查询, 看是不是 order 的锅
+    const probe = await sb.from("student_wishes")
+      .select("id, end_user_id, title")
+      .eq("end_user_id", child.id);
 
     const list = (data || []).map((w: any) => ({
       id: w.id,
@@ -70,7 +74,20 @@ export async function GET(req: Request) {
       createdAt: w.created_at,
       preview: String(w.content || "").slice(0, 40)
     }));
-    return NextResponse.json({ ok: true, student: { id: child.id, name: child.name }, list });
+    return NextResponse.json({
+      ok: true,
+      student: { id: child.id, name: child.name },
+      list,
+      _debug: {
+        main_rows: (data || []).length,
+        main_err: error,
+        probe_rows: (probe.data || []).length,
+        probe_err: probe.error,
+        probe_first: probe.data?.[0] || null,
+        child_id_param: url.searchParams.get("endUserId"),
+        child_resolved: child.id
+      }
+    });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || "读取失败" }, { status: 500 });
   }

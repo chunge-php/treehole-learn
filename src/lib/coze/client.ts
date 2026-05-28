@@ -121,6 +121,7 @@ export async function* streamWorkflow(input: WorkflowRunInput): AsyncGenerator<C
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  const debug = process.env.COZE_DEBUG === "1";
 
   while (true) {
     const { value, done } = await reader.read();
@@ -132,11 +133,16 @@ export async function* streamWorkflow(input: WorkflowRunInput): AsyncGenerator<C
     while ((idx = buffer.indexOf("\n\n")) >= 0) {
       const chunk = buffer.slice(0, idx);
       buffer = buffer.slice(idx + 2);
+      if (debug) console.log("[coze:sse:raw]", JSON.stringify(chunk));
       const evt = parseSseChunk(chunk);
-      if (evt) yield evt;
+      if (evt) {
+        if (debug) console.log("[coze:sse:parsed]", evt.type, JSON.stringify(evt).slice(0, 200));
+        yield evt;
+      }
     }
   }
   if (buffer.trim()) {
+    if (debug) console.log("[coze:sse:raw:tail]", JSON.stringify(buffer));
     const evt = parseSseChunk(buffer);
     if (evt) yield evt;
   }

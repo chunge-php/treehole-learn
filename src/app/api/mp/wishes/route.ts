@@ -60,6 +60,7 @@ export async function GET(req: Request) {
       .order("created_at", { ascending: false })
       .limit(50);
     if (error) throw new Error(error.message);
+    console.log("[mp/wishes] child:", child.id, "rows:", (data || []).length, error ? "ERR=" + JSON.stringify(error) : "");
 
     const list = (data || []).map((w: any) => ({
       id: w.id,

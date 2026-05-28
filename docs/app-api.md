@@ -55,8 +55,12 @@
 | POST | `/api/app/ai/chat` | **AI 聊天 SSE 流式**(扣子工作流,支持文字+图片+多轮) | ✅ |
 | POST | `/api/app/face-check/upload-media` | **多模态文件上传**(audio/video/script → 华为云 OBS) | ✅ |
 | POST | `/api/app/face-check/finalize` | **多模态评估完成**(生成 11 项分值 + 写学生档案) | ✅ |
+| GET | `/api/app/assignments/calendar` | 导学历月历分布(每天任务数 + 完成数) | ✅ |
+| GET | `/api/app/assignments?date=` | 当日任务列表(按学科分组) | ✅ |
+| GET | `/api/app/assignments/:id` | 任务详情(支持 3 种 task_type) | ✅ |
+| POST | `/api/app/assignments/:id/complete` | 标记任务完成 / 取消完成 | ✅ |
 
-> 后续接口陆续补充: 导学历日历、心屿世界推荐、错题本、作文批改等。
+> 后续接口陆续补充: 心屿世界推荐、错题本、作文批改等。
 
 ---
 
@@ -1122,6 +1126,236 @@ Future<Map> _uploadOne(File f, String kind) async {
 - 接发展猫 API `http://gpu.fazhanmao.com:9096/system/learning_ability/get_file_paths` 拿真实 11 项分值
 - 启动判别:`status === "ok"` → 用真分;否则降级到本地模拟
 - `debug.mode` 变成 `fazhanmao_real`
+
+---
+
+## 导学历(日历 + 任务列表)
+
+对应底栏 tab「导学历」(设计图 6 / 7 / 8 / 9)。数据**两个来源合并**进同一列表:
+- 作业(source ∈ `admin / parent / student`)— 后台/家长小程序/学生 App 自建
+- 心屿世界推荐(source = `recommendation`)— 第三方多模态推荐(**真接口未给前一期跳过,后端写入逻辑后期补,前端不变**)
+
+任务类型(`task_type`)3 种:
+| 类型 | 字段填充 | 设计图 |
+|---|---|---|
+| `homework` | `content_md`(图文/文本作业) | 图6 数学/作业/手工 |
+| `video_course` | `video_url` + `meta.{teacher_name, teacher_avatar, teacher_school, teacher_info}` | 图7 二元一次方程教学视频 |
+| `event_registration` | `meta.{location, organizer_name, organizer_avatar, registered_count, event_time}` | 图8 阳光周末读书会 |
+
+---
+
+### GET `/api/app/assignments/calendar?month=YYYY-MM` — 月历分布
+
+```http
+GET /api/app/assignments/calendar?month=2026-05
+Authorization: Bearer <token>
+```
+
+`month` 选填,缺省取本月。
+
+**响应**:
+```jsonc
+{
+  "ok": true,
+  "month": "2026-05",
+  "stats": [
+    { "date": "2026-05-01", "total": 0, "completed": 0 },
+    { "date": "2026-05-15", "total": 3, "completed": 1 },
+    { "date": "2026-05-28", "total": 4, "completed": 1 }
+    // ...一个月每天一条
+  ]
+}
+```
+
+前端在月历每个日期下方画红点:`total > 0` 显示红点;`completed >= total` 显示绿点(全部完成)。
+
+---
+
+### GET `/api/app/assignments?date=YYYY-MM-DD` — 当日任务列表
+
+```http
+GET /api/app/assignments?date=2026-05-28
+Authorization: Bearer <token>
+```
+
+`date` 选填,缺省今天。
+
+**响应**:
+```jsonc
+{
+  "ok": true,
+  "date": "2026-05-28",
+  "pending_count": 3,         // 今日待办
+  "completed_count": 1,       // 今日已完成
+  "by_subject": [
+    {
+      "subject": "数学",
+      "count": 1,
+      "remaining_minutes": 9,
+      "tasks": [
+        {
+          "id": "as_xxx",
+          "name": "二元一次方程(组)及二元一次方程(组)的解",
+          "subject": "数学",
+          "task_type": "video_course",      // homework / video_course / event_registration
+          "source": "admin",                 // admin / parent / student / recommendation
+          "estimated_minutes": 9,
+          "actual_minutes": null,
+          "cover_url": "https://....jpg",
+          "completed_at": null,
+          "is_completed": false,
+          "teacher_name": "王宁",            // video_course 快显
+          "event_registered_count": null     // event 快显
+        }
+      ]
+    },
+    {
+      "subject": "作业",
+      "count": 2,
+      "remaining_minutes": 25,
+      "tasks": [ /* ... */ ]
+    }
+  ]
+}
+```
+
+**前端建议**:
+- 设计图 6 左侧的「今日待办 / 今日任务」直接用这个响应渲染:
+  - 顶部 `pending_count` / `completed_count` 配数字
+  - 中部 `by_subject[]` 按学科分组卡片
+  - 每个学科行显示 `count` + `remaining_minutes` 摘要,点击展开 `tasks[]`
+
+---
+
+### GET `/api/app/assignments/:id` — 任务详情
+
+```http
+GET /api/app/assignments/as_xxx
+Authorization: Bearer <token>
+```
+
+**响应**(以 video_course 为例,对应图7):
+```jsonc
+{
+  "ok": true,
+  "task": {
+    "id": "as_xxx",
+    "name": "二元一次方程(组)及二元一次方程(组)的解",
+    "subject": "数学",
+    "task_type": "video_course",
+    "source": "admin",
+    "start_date": "2026-05-28",
+    "end_date": "2026-05-28",
+    "estimated_minutes": 9,
+    "actual_minutes": null,
+    "cover_url": "https://....jpg",
+    "content_md": null,
+    "video_url": "https://....mp4",                // task_type=video_course 时
+    "meta": {
+      "teacher_name": "王宁",
+      "teacher_avatar": "https://....jpg",
+      "teacher_school": "北京师范大学嘉实附属学校",
+      "teacher_info": "..."
+    },
+    "completed_at": null,
+    "is_completed": false,
+    "created_at": "2026-05-25T08:00:00.000Z"
+  }
+}
+```
+
+**3 种 task_type 字段差异**:
+
+| 字段 | homework | video_course | event_registration |
+|---|---|---|---|
+| `content_md` | ✅ 富文本内容 | — | — |
+| `video_url` | — | ✅ 视频 URL | — |
+| `meta.teacher_*` | — | ✅ 教师信息 | — |
+| `meta.location` / `event_time` | — | — | ✅ 活动信息 |
+| `meta.organizer_*` / `registered_count` | — | — | ✅ 主办方/报名人数 |
+
+**错误码**:
+| HTTP | code | 说明 |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | token 失效 |
+| 403 | `NOT_OWNER` | 任务不属于该学生 |
+| 404 | `NOT_FOUND` | 任务被删除 |
+
+---
+
+### POST `/api/app/assignments/:id/complete` — 标记完成 / 取消完成
+
+```http
+POST /api/app/assignments/as_xxx/complete
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "completed": true,            // 选填, 默认 true; 想取消传 false
+  "actual_minutes": 12          // 选填: 实际用时
+}
+```
+
+**响应**:
+```jsonc
+{
+  "ok": true,
+  "task": {
+    "id": "as_xxx",
+    "completed_at": "2026-05-28T16:00:00.000Z",
+    "actual_minutes": 12,
+    "is_completed": true
+  }
+}
+```
+
+设计上「实际用时」给个人中心的 24h 专注度曲线 + 学习时长统计用,前端可在点完成时弹个简单 input 让学生填(也可不填,后端记 null)。
+
+---
+
+### Flutter 集成示例
+
+```dart
+// 导学历首屏: 并发拿月历 + 今日列表
+final results = await Future.wait([
+  dio.get('/api/app/assignments/calendar?month=2026-05'),
+  dio.get('/api/app/assignments?date=2026-05-28'),
+]);
+final monthStats = results[0].data['stats'];      // List<{date, total, completed}>
+final today      = results[1].data;                // {pending_count, by_subject: [...]}
+
+// 切换日期
+Future<void> pickDate(String date) async {
+  final r = await dio.get('/api/app/assignments?date=$date');
+  setState(() => today = r.data);
+}
+
+// 点任务进详情
+Future<void> openTask(String taskId) async {
+  final r = await dio.get('/api/app/assignments/$taskId');
+  Navigator.push(context, MaterialPageRoute(builder: (_) {
+    final t = r.data['task'];
+    switch (t['task_type']) {
+      case 'video_course': return VideoTaskPage(task: t);
+      case 'event_registration': return EventTaskPage(task: t);
+      default: return HomeworkTaskPage(task: t);   // homework + content_md
+    }
+  }));
+}
+
+// 标记完成
+await dio.post('/api/app/assignments/$taskId/complete', data: {
+  'completed': true,
+  'actual_minutes': elapsedMin,
+});
+```
+
+### 业务规则
+
+- **任务跨日有效**:`start_date <= today <= end_date` 范围内每天都在列表里显示
+- **完成是单次**:`completed_at` 不为 null 即视为完成,可以"取消完成"重新置为 null
+- **学科默认值**:`subject` 为 null 时归"作业"(前端展示用)
+- **推荐任务**:目前 `source = recommendation` 是预留,后期心屿世界第三方接通时,后端会自动写入,前端代码不用动
 
 ---
 

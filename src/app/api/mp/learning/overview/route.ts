@@ -86,7 +86,7 @@ const CLOUD_COLORS = ["#1490ff", "#ff6a00", "#3CA272", "#73C0DE", "#FAC858", "#E
  *   - 同词永远落同位置 (hash 稳定), 越界裁剪到画布内
  * 画布按前端 .cloud-zone 100% × 440rpx 推算约 480 × 400
  */
-function layoutCloudWords(words: string[]): Array<{ text: string; size: number; color: string; x: number; y: number }> {
+function layoutCloudWords(words: string[]): Array<{ text: string; size: number; color: string; x: number; y: number; rotate: number }> {
   const CW = 480, CH = 400;
   const CX = CW / 2, CY = CH / 2;
   const ANGLE_STEP = (60 * Math.PI) / 180;  // 每个词转 60°, 6 个词转一圈, 旋转感明显
@@ -114,12 +114,16 @@ function layoutCloudWords(words: string[]): Array<{ text: string; size: number; 
     }
     const x = Math.max(8, Math.min(CW - approxW - 8, cx - approxW / 2));
     const y = Math.max(8, Math.min(CH - size - 8, cy - size / 2));
+    // 旋转: 中心词水平 (0°), 其他词从一组角度池里按 hash 抽 — 大部分水平/小角度, 少量大角度增加灵动
+    const ROTATE_POOL = [0, 0, 0, 0, 15, -15, 30, -30, 45, -45, 90, -90];
+    const rotate = i === 0 ? 0 : ROTATE_POOL[Math.floor(hash01(text, 53) * ROTATE_POOL.length)];
     return {
       text,
       size,
       color: CLOUD_COLORS[i % CLOUD_COLORS.length],
       x: Math.round(x),
-      y: Math.round(y)
+      y: Math.round(y),
+      rotate
     };
   });
 }

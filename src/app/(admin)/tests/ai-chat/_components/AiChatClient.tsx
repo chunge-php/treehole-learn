@@ -67,29 +67,30 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
       await readSse(resp.body, (event, data) => {
         if (event === "delta" && data?.text != null) {
           setMessages(prev => {
-            const copy = [...prev];
-            const last = copy[copy.length - 1];
-            if (last && last.role === "assistant") {
-              last.content += data.text;
-            }
-            return copy;
+            const i = prev.length - 1;
+            if (i < 0 || prev[i].role !== "assistant") return prev;
+            return [
+              ...prev.slice(0, i),
+              { ...prev[i], content: prev[i].content + data.text }
+            ];
           });
         } else if (event === "done") {
           setMessages(prev => {
-            const copy = [...prev];
-            const last = copy[copy.length - 1];
-            if (last && last.role === "assistant") last.streaming = false;
-            return copy;
+            const i = prev.length - 1;
+            if (i < 0 || prev[i].role !== "assistant") return prev;
+            return [
+              ...prev.slice(0, i),
+              { ...prev[i], streaming: false }
+            ];
           });
         } else if (event === "error") {
           setMessages(prev => {
-            const copy = [...prev];
-            const last = copy[copy.length - 1];
-            if (last && last.role === "assistant" && !last.content) {
-              last.content = `❌ ${data?.message || "请求失败"}`;
-              last.streaming = false;
-            }
-            return copy;
+            const i = prev.length - 1;
+            if (i < 0 || prev[i].role !== "assistant" || prev[i].content) return prev;
+            return [
+              ...prev.slice(0, i),
+              { ...prev[i], content: `❌ ${data?.message || "请求失败"}`, streaming: false }
+            ];
           });
           toast.error(data?.message || "请求失败");
         }

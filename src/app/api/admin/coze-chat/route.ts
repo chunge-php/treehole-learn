@@ -54,12 +54,18 @@ export async function POST(req: NextRequest) {
       };
       let full = "";
       try {
+        // 历史对话拼成文本; 扣子工作流大模型节点 prompt 模板里用 {{history_text}} 引用
+        const historyText = (history as any[])
+          .filter(m => m && (m.role === "user" || m.role === "assistant") && m.content)
+          .map(m => (m.role === "user" ? "学生: " : "导师: ") + m.content)
+          .join("\n\n");
         for await (const evt of streamWorkflow({
           workflowId,
           parameters: {
             system_prompt: systemPrompt,
             user_message: userMessage,
-            history,
+            history_text: historyText,
+            history,                    // 同时传数组备用 (若工作流后续切到 messages 模式可用)
           }
         })) {
           if (evt.type === "delta") {

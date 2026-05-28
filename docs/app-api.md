@@ -36,8 +36,9 @@
 |---|---|---|---|
 | POST | `/api/app/auth/login` | 学生账号密码登录 | ❌ |
 | GET | `/api/app/me` | 获取当前登录学生信息(启动时校验 token) | ✅ |
+| GET | `/api/app/home/today` | 首页今日数据(三态机:测评卡 / 解锁卡 / 完整 3 卡) | ✅ |
 
-> 后续接口陆续补充: 首页今日数据、导学历日历、AI 聊天 SSE 流、心屿世界推荐、错题本、作文批改、人脸识别触发多模态等。
+> 后续接口陆续补充: 导学历日历、AI 聊天 SSE 流、心屿世界推荐、错题本、作文批改、人脸识别触发多模态等。
 
 ---
 
@@ -146,6 +147,144 @@ Authorization: Bearer eyJzdHVkZW50X2lkIjoiZXVfeHh4Iiwi...
 
 ---
 
+---
+
+## GET `/api/app/home/today` — 首页今日数据
+
+平板登录后进首页就调一次。后端根据学生**今天**做没做学习力测评 + 人脸识别多模态,返回 3 态之一:
+
+| status | 含义 | 前端显示(对照设计图) |
+|---|---|---|
+| `no_eval` | 今天**未做学习力测评** | 显示「学习力测评」卡(限免 5 分 / 专业 30 分) → 图 2 |
+| `no_face` | 测评做了但**未做人脸识别多模态** | 显示「解锁今日学习状态」卡(10 秒解锁) → 图 3 |
+| `ready`  | 两个都做了 | 显示完整 3 卡:学习状态 + 解压游戏 + 导学历 → 图 4 |
+
+### 请求
+
+```http
+GET /api/app/home/today
+Authorization: Bearer <token>
+```
+
+### 响应
+
+#### 状态 `no_eval`(未做测评)
+
+```jsonc
+{
+  "ok": true,
+  "greeting": "张小明同学,准备好开启今天的学习了吗?",
+  "status": "no_eval",
+  "student_name": "张小明",
+  "assignments_summary": {
+    "pending": 0,
+    "completed": 0,
+    "by_subject": []
+  }
+}
+```
+
+> 前端这种状态下:顶部 greeting 气泡 + 中间"学习力测评卡"(测评卡内容/价格前端写死)+ 底部导学历入口。
+
+#### 状态 `no_face`(测评做了,人脸识别未做)
+
+跟 `no_eval` 结构一样,只是 `status: "no_face"`。前端中间卡变成「解锁今日学习状态」。
+
+#### 状态 `ready`(完整数据)
+
+```jsonc
+{
+  "ok": true,
+  "greeting": "张小明回来啦~你的专属 AI 小助手已上线",
+  "status": "ready",
+  "student_name": "张小明",
+
+  "multimodal": {
+    "vitality": 86,                 // 动力 = 综合分 (composite_score, 0-100)
+    "stress": 12,                   // 压力 = 100 - 抗压力维度均分, 越低越好
+    "state_label": "极佳学习状态",  // 元气 (15 级映射)
+    "level": 2,                     // 1-15
+    "comment": "专注度和兴趣都在线...",
+    "keywords": ["高度专注","兴趣浓厚","续航在线","状态稳定"],  // 学习状态关键词 (词云)
+    "evaluated_at": "2026-05-28T15:30:00.000Z"
+  },
+
+  "game": {                          // 解压游戏 (基于多模态结果查表; 第三方提供, 当前不管资源)
+    "name": "舒尔特方格",
+    "keywords": "专注、巩固、稳定",
+    "cover_url": null,               // 一期不返封面, 前端用默认占位图
+    "duration_min": 3
+  },
+
+  "assignments_summary": {
+    "pending": 3,
+    "completed": 1,
+    "by_subject": [
+      { "subject": "数学", "count": 1, "remaining_minutes": 15 },
+      { "subject": "作业", "count": 2, "remaining_minutes": 30 }
+    ]
+  }
+}
+```
+
+### 字段说明
+
+#### `multimodal`(只在 ready 时返回)
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `vitality` | int | 动力 = 综合分,0-100 |
+| `stress` | int | 压力 = 100 - 抗压力维度均分,越低越好(设计图 "12" 即偏放松) |
+| `state_label` | string | 状态文案 (`"极佳学习状态"` / `"需调整状态"` 等 15 级文案) |
+| `level` | int | 1-15 级,越小越好 |
+| `comment` | string | 该等级的评语全文 |
+| `keywords` | string[] | 从 11 项分值查表生成,长度 ≤ 6,可做词云/标签展示 |
+| `evaluated_at` | iso8601 | 这次多模态的时间戳 |
+
+#### `game`(只在 ready 时返回)
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `name` | string | 推荐游戏名 |
+| `keywords` | string | 关键词字符串(逗号分隔) |
+| `cover_url` | string \| null | 一期固定 null,前端用默认图;后期接第三方游戏接入 |
+| `duration_min` | int | 默认 3 分钟 |
+
+#### `assignments_summary`(始终返回)
+- `pending`:今日待办数(`start_date <= today <= end_date` 且未 `completed_at`)
+- `completed`:今日已完成数
+- `by_subject[]`:按学科分组(一期从 name 关键词推断:数学/语文/英语/物理/化学/生物/历史/地理/政治/手工/读书会),分不出归"作业";后期 `assignments` 表加 `subject` 字段后更准
+
+### 前端集成建议
+
+```dart
+// 伪代码 (Flutter)
+final resp = await dio.get('/api/app/home/today',
+  options: Options(headers: { 'Authorization': 'Bearer $token' }));
+
+switch (resp.data['status']) {
+  case 'no_eval':
+    showEvalCard();   // 学习力测评卡
+    break;
+  case 'no_face':
+    showUnlockCard(); // 解锁今日学习状态
+    break;
+  case 'ready':
+    showStatusCard(resp.data['multimodal']);
+    showGameCard(resp.data['game']);
+    break;
+}
+showAssignmentsCard(resp.data['assignments_summary']);
+```
+
+### 错误码
+
+| HTTP | code | 说明 |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | token 失效,跳登录页 |
+| 403 | `ACCOUNT_DISABLED` | 学生账号被禁用 |
+| 404 | `NOT_FOUND` | 学生记录被删了 |
+
+---
+
 ## 联调说明
 
 ### 测试环境
@@ -169,7 +308,6 @@ Authorization: Bearer eyJzdHVkZW50X2lkIjoiZXVfeHh4Iiwi...
 
 - `POST /api/app/auth/logout` — 退出登录(可选,客户端清 token 即可)
 - `POST /api/app/auth/change-password` — 修改密码
-- `GET /api/app/home/today` — 首页今日学习状态卡 + 解压游戏推荐 + 导学历摘要
 - `POST /api/app/face-check/start` — 触发人脸识别 + 多模态测评
 - `GET /api/app/assignments` — 导学历任务列表
 - `POST /api/app/assignments` — 智能添加(作业添加)

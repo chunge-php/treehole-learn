@@ -48,12 +48,21 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
 
     const userMessage = input.trim();
     const history = messages.map(m => ({ role: m.role, content: m.content }));
-    setMessages(p => [...p, { role: "user", content: userMessage }, { role: "assistant", content: "", streaming: true }]);
+
+    // 用 setMessages 内部计算 assistantIdx, 锁定本次 SSE 流要更新哪条气泡
+    // (用户连发时, prev.length-1 会指向新对话的气泡导致徽章错位, 固定 idx 避免)
+    let assistantIdx = -1;
+    setMessages(prev => {
+      assistantIdx = prev.length + 1;
+      return [...prev, { role: "user", content: userMessage }, { role: "assistant", content: "", streaming: true }];
+    });
     setInput("");
     setSending(true);
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    // 主对话 done 后立即解禁; 后台档案分析继续跑但不阻塞 UI
+    let doneReceived = false;
     try {
       const resp = await fetch("/api/admin/coze-chat", {
         method: "POST",
@@ -65,65 +74,59 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
         const txt = await resp.text().catch(() => "");
         throw new Error(`接口错误 [${resp.status}]: ${txt.slice(0, 200)}`);
       }
-      await readSse(resp.body, (event, data) => {
+      // 不 await: 让 readSse 在后台继续接 profile_updated, 不阻塞 send() 返回
+      readSse(resp.body, (event, data) => {
         if (event === "delta" && data?.text != null) {
           setMessages(prev => {
-            const i = prev.length - 1;
-            if (i < 0 || prev[i].role !== "assistant") return prev;
-            return [
-              ...prev.slice(0, i),
-              { ...prev[i], content: prev[i].content + data.text }
-            ];
+            if (!prev[assistantIdx] || prev[assistantIdx].role !== "assistant") return prev;
+            const copy = [...prev];
+            copy[assistantIdx] = { ...copy[assistantIdx], content: copy[assistantIdx].content + data.text };
+            return copy;
           });
         } else if (event === "done") {
+          doneReceived = true;
           setMessages(prev => {
-            const i = prev.length - 1;
-            if (i < 0 || prev[i].role !== "assistant") return prev;
-            return [
-              ...prev.slice(0, i),
-              { ...prev[i], streaming: false }
-            ];
+            if (!prev[assistantIdx] || prev[assistantIdx].role !== "assistant") return prev;
+            const copy = [...prev];
+            copy[assistantIdx] = { ...copy[assistantIdx], streaming: false };
+            return copy;
           });
+          setSending(false);   // 立刻解禁输入框
         } else if (event === "profile_updated") {
           const fields: string[] = Array.isArray(data?.fields) ? data.fields : [];
           if (fields.length > 0) {
             setMessages(prev => {
-              const i = prev.length - 1;
-              if (i < 0 || prev[i].role !== "assistant") return prev;
-              return [
-                ...prev.slice(0, i),
-                { ...prev[i], profileUpdated: fields }
-              ];
+              if (!prev[assistantIdx] || prev[assistantIdx].role !== "assistant") return prev;
+              const copy = [...prev];
+              copy[assistantIdx] = { ...copy[assistantIdx], profileUpdated: fields };
+              return copy;
             });
             toast.success(`📋 档案已更新: ${fields.slice(0, 3).join(", ")}${fields.length > 3 ? ` 等 ${fields.length} 项` : ""}`);
           }
         } else if (event === "error") {
           setMessages(prev => {
-            const i = prev.length - 1;
-            if (i < 0 || prev[i].role !== "assistant" || prev[i].content) return prev;
-            return [
-              ...prev.slice(0, i),
-              { ...prev[i], content: `❌ ${data?.message || "请求失败"}`, streaming: false }
-            ];
+            if (!prev[assistantIdx] || prev[assistantIdx].role !== "assistant" || prev[assistantIdx].content) return prev;
+            const copy = [...prev];
+            copy[assistantIdx] = { ...copy[assistantIdx], content: `❌ ${data?.message || "请求失败"}`, streaming: false };
+            return copy;
           });
+          if (!doneReceived) setSending(false);
           toast.error(data?.message || "请求失败");
         }
+      }).catch(e => {
+        if (e?.name === "AbortError") return;
+        console.error("[ai-chat] sse read error:", e);
       });
     } catch (e: any) {
-      if (e?.name === "AbortError") return;
+      if (e?.name === "AbortError") { setSending(false); return; }
       setMessages(prev => {
+        if (!prev[assistantIdx] || prev[assistantIdx].role !== "assistant" || prev[assistantIdx].content) return prev;
         const copy = [...prev];
-        const last = copy[copy.length - 1];
-        if (last && last.role === "assistant" && !last.content) {
-          last.content = `❌ ${e?.message || String(e)}`;
-          last.streaming = false;
-        }
+        copy[assistantIdx] = { ...copy[assistantIdx], content: `❌ ${e?.message || String(e)}`, streaming: false };
         return copy;
       });
       toast.error(e?.message || "请求失败");
-    } finally {
       setSending(false);
-      abortRef.current = null;
     }
   }
 

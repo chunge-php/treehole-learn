@@ -150,30 +150,36 @@ export async function POST(req: NextRequest) {
               send("delta", { text: full });
             }
 
-            // 档案写入: updateProfileFromChat 和 mergeProfileUpdate 内部各自走
-            // 「学生级串行队列」(见 src/lib/queue.ts), 同学生的多次写入严格按
-            // 入队顺序串行。用户连发消息时, 后一条的写入会自动等前一条完成,
-            // 避免数据竞争。这里不需要再额外包队列, 否则嵌套同 key 会死锁。
-            if (full) {
-              try {
-                await updateProfileFromChat({
-                  end_user_id: endUserId,
-                  user_message: userMessage,
-                  assistant_message: full,
-                  by: adminId
-                });
-                const changedFields = await runProfileExtract({
-                  endUserId, userMessage, assistantMessage: full, adminId
-                });
-                if (changedFields.length > 0) {
-                  send("profile_updated", { fields: changedFields });
-                }
-              } catch (e: any) {
-                console.error("[ai-chat] post-stream sync error:", e?.message || e);
-              }
-            }
+            // 立刻推 done → 前端解禁输入框, 用户可继续发言
             send("done", { full });
-            controller.close();
+
+            // 档案写入异步后台跑, 完成后再推 profile_updated 然后关流。
+            // queue.ts 已经保证同学生写入串行, 不必担心数据竞争。
+            if (full) {
+              (async () => {
+                try {
+                  await updateProfileFromChat({
+                    end_user_id: endUserId,
+                    user_message: userMessage,
+                    assistant_message: full,
+                    by: adminId
+                  });
+                  const changedFields = await runProfileExtract({
+                    endUserId, userMessage, assistantMessage: full, adminId
+                  });
+                  if (changedFields.length > 0) {
+                    try { send("profile_updated", { fields: changedFields }); }
+                    catch { /* 前端可能已断开, 静默 */ }
+                  }
+                } catch (e: any) {
+                  console.error("[ai-chat] post-stream sync error:", e?.message || e);
+                } finally {
+                  try { controller.close(); } catch { /* 已关 */ }
+                }
+              })();
+            } else {
+              controller.close();
+            }
             return;
           } else if (evt.type === "error") {
             send("error", { message: evt.message });

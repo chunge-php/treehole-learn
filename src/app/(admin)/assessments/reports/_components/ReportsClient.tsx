@@ -1,38 +1,47 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { EmptyState } from "@/components/admin/EmptyState";
-import { ArrowLeft, Plus, FileBarChart, Trash2, Pencil, Eye, Loader2, ClipboardList } from "lucide-react";
-import { createReportSession, deleteReportSession, type ReportSessionRow } from "../actions";
+import { ArrowLeft, Plus, FileBarChart, Trash2, Pencil, Eye, Loader2 } from "lucide-react";
+import { createReportSession, deleteReportSession, listEndUsersForSelect, type ReportSessionRow } from "../actions";
 import { toast } from "sonner";
+
+type EndUserOpt = { id: string; name: string; phone: string; grade: string; store?: string; channel?: string };
 
 export function ReportsClient({ initialRows }: { initialRows: ReportSessionRow[] }) {
   const router = useRouter();
   const [rows, setRows] = useState(initialRows);
   const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState("");
+  const [endUserId, setEndUserId] = useState("");
+  const [endUsers, setEndUsers] = useState<EndUserOpt[]>([]);
   const [remark, setRemark] = useState("");
   const [pending, start] = useTransition();
   const [delTarget, setDelTarget] = useState<ReportSessionRow | null>(null);
   const [delPending, startDel] = useTransition();
 
+  useEffect(() => {
+    if (createOpen && endUsers.length === 0) {
+      listEndUsersForSelect().then(setEndUsers).catch(() => toast.error("加载学生失败"));
+    }
+  }, [createOpen, endUsers.length]);
+
   function submitCreate() {
-    if (!name.trim()) { toast.error("请填写记录名称"); return; }
+    if (!endUserId) { toast.error("请选择受测学生"); return; }
     start(async () => {
       try {
-        const { id } = await createReportSession({ name, remark });
+        const { id } = await createReportSession({ end_user_id: endUserId, remark });
         toast.success("已创建, 开始作答");
-        setCreateOpen(false); setName(""); setRemark("");
+        setCreateOpen(false); setEndUserId(""); setRemark("");
         router.push(`/assessments/reports/${id}`);
       } catch (e: any) {
         toast.error(e?.message || "创建失败");
@@ -150,8 +159,19 @@ export function ReportsClient({ initialRows }: { initialRows: ReportSessionRow[]
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label>记录名称 <span className="text-destructive">*</span></Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="例: 张三 / 2026春季测评" autoFocus />
+              <Label>受测学生 <span className="text-destructive">*</span></Label>
+              <Combobox
+                options={endUsers.map(u => ({
+                  value: u.id,
+                  label: u.name,
+                  hint: [u.grade, u.store || u.channel, u.phone].filter(Boolean).join(" · ")
+                }))}
+                value={endUserId}
+                onChange={v => setEndUserId(v)}
+                placeholder="选择学生 (按姓名或手机搜索)"
+                searchPlaceholder="搜索姓名/手机…"
+                emptyText="没有匹配的学生"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>备注</Label>

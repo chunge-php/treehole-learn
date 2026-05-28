@@ -6,6 +6,7 @@ import { shortId } from "@/lib/utils";
 import { analyzeAudio, SAMPLE_AUDIO } from "@/lib/report/fazhanmao";
 import { uploadAudioToObs, obsConfigured } from "@/lib/report/huawei-obs";
 import { buildReportForSession } from "@/lib/report/build";
+import { updateProfileFromReport } from "@/lib/profile/sync";
 
 /** 报告流水号: XXL + 7位补零 */
 function buildSerial(num: number): string {
@@ -22,6 +23,7 @@ export type ReportSessionRow = {
   status: "in_progress" | "completed";
   completed_at: string | null;
   created_at: string;
+  end_user_id: string | null;
 };
 
 /** 报告记录列表 (倒序) */
@@ -30,18 +32,45 @@ export async function listReportSessions(): Promise<ReportSessionRow[]> {
   const sb = adminSupabase();
   const { data, error } = await sb
     .from("report_sessions")
-    .select("id, name, remark, total_questions, answered_count, status, completed_at, created_at")
+    .select("id, name, remark, total_questions, answered_count, status, completed_at, created_at, end_user_id")
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data || []) as ReportSessionRow[];
 }
 
-/** 新建报告记录: 快照当前所有「启用」题的顺序 */
-export async function createReportSession(input: { name: string; remark?: string }) {
-  const s = requireAdmin();
-  const name = (input.name || "").trim();
-  if (!name) throw new Error("请填写记录名称");
+/** 终端学生 (含渠道/店铺名) — 给测评创建/多模态测试下拉用 */
+export async function listEndUsersForSelect(q?: string) {
+  requireAdmin();
   const sb = adminSupabase();
+  let qb = sb
+    .from("end_users")
+    .select("id, name, phone, grade, store_id, channel_id, stores(name), channels(name)")
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  const kw = (q || "").trim();
+  if (kw) qb = qb.or(`name.ilike.%${kw}%,phone.ilike.%${kw}%`);
+  const { data, error } = await qb;
+  if (error) throw new Error(error.message);
+  return (data || []).map((u: any) => ({
+    id: u.id as string,
+    name: u.name as string,
+    phone: (u.phone as string) || "",
+    grade: (u.grade as string) || "",
+    store: u.stores?.name as string | undefined,
+    channel: u.channels?.name as string | undefined
+  }));
+}
+
+/** 新建报告记录: 关联真实终端学生, 快照当前所有「启用」题的顺序 */
+export async function createReportSession(input: { end_user_id: string; remark?: string }) {
+  const s = requireAdmin();
+  const endUserId = (input.end_user_id || "").trim();
+  if (!endUserId) throw new Error("请选择受测学生");
+  const sb = adminSupabase();
+
+  const { data: eu } = await sb.from("end_users").select("id, name").eq("id", endUserId).maybeSingle();
+  if (!eu) throw new Error("学生不存在");
 
   const { data: qs, error } = await sb
     .from("assessments")
@@ -55,7 +84,8 @@ export async function createReportSession(input: { name: string; remark?: string
   const id = shortId("rs");
   const { data: created, error: e2 } = await sb.from("report_sessions").insert({
     id,
-    name,
+    name: eu.name,
+    end_user_id: endUserId,
     remark: input.remark?.trim() || null,
     question_ids: ids,
     total_questions: ids.length,
@@ -64,7 +94,6 @@ export async function createReportSession(input: { name: string; remark?: string
     created_by: s.account_id
   }).select("seq_no").single();
   if (e2) throw new Error(e2.message);
-  // 生成报告流水号 (作发展猫 audio_id)
   const code = buildSerial((created as any)?.seq_no ?? 0);
   await sb.from("report_sessions").update({ code }).eq("id", id);
   revalidatePath("/assessments/reports");
@@ -234,11 +263,41 @@ export async function uploadVoiceAudio(formData: FormData, sessionId: string) {
   return { url };
 }
 
-/** 生成报告数据 (value1~value10), 供结果页渲染 */
+/** 生成报告数据 (value1~value10), 供结果页渲染; 完成态下顺手落库 + 同步学生档案 */
 export async function generateSessionReport(sessionId: string) {
-  requireAdmin();
+  const s = requireAdmin();
   const r = await buildReportForSession(sessionId);
-  return r?.report ?? null;
+  if (!r?.report) return null;
+
+  // 仅在 completed 时持久化 + 同步档案
+  if (r.status === "completed") {
+    const sb = adminSupabase();
+    const { data: sess } = await sb
+      .from("report_sessions")
+      .select("end_user_id, report_data")
+      .eq("id", sessionId)
+      .maybeSingle();
+
+    // 首次完成 → 写入 report_data
+    if (sess && !sess.report_data) {
+      await sb.from("report_sessions").update({ report_data: r.report }).eq("id", sessionId);
+    }
+    // 有关联学生 → 同步档案
+    if (sess?.end_user_id) {
+      try {
+        await updateProfileFromReport({
+          end_user_id: sess.end_user_id,
+          report_data: r.report,
+          session_id: sessionId,
+          by: s.account_id
+        });
+      } catch (e) {
+        // 同步失败不影响报告渲染
+        console.error("[profile sync] report → profile failed:", e);
+      }
+    }
+  }
+  return r.report;
 }
 
 export async function deleteReportSession(id: string) {

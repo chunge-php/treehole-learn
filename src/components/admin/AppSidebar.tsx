@@ -3,7 +3,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Building2, Store, Users, ClipboardList, BookOpen,
-  Settings2, ReceiptText, Leaf, ShieldCheck, ChevronRight, FileText, MessageSquare, Smartphone
+  Settings2, ReceiptText, Leaf, ShieldCheck, ChevronRight, FileText, MessageSquare, Smartphone,
+  FlaskConical, Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,13 @@ const groups: Group[] = [
     items: [
       { href: "/orders", label: "订单", icon: ReceiptText },
       { href: "/feedback", label: "用户反馈", icon: MessageSquare, adminOnly: true }
+    ]
+  },
+  {
+    title: "测试中心",
+    items: [
+      { href: "/tests/multimodal", label: "多模态测试", icon: FlaskConical, adminOnly: true },
+      { href: "/tests/prompt-templates", label: "提示词模板", icon: Sparkles, adminOnly: true }
     ]
   },
   {

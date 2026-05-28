@@ -34,6 +34,31 @@ export type WorkflowRunResult = {
 const BASE = process.env.COZE_BASE_URL || "https://api.coze.cn";
 const TOKEN = process.env.COZE_API_TOKEN || "";
 
+/** 上传文件到扣子, 拿到 file_id (有效期 3 个月)
+ *  支持图片 JPG/PNG/GIF/WEBP/HEIC/HEIF/BMP/PCD/TIFF + 文档/视频/音频
+ *  PAT 必须有 uploadFile 权限
+ */
+export async function uploadFileToCoze(file: File | Blob, filename: string): Promise<{ file_id: string; bytes: number; file_name: string }> {
+  if (!cozeConfigured()) throw new Error("COZE_API_TOKEN 未配置");
+  const form = new FormData();
+  form.append("file", file, filename);
+  const res = await fetch(`${BASE}/v1/files/upload`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${TOKEN}` },   // 不要手动设 Content-Type, FormData 自动带 boundary
+    body: form,
+    cache: "no-store"
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json?.code !== 0) {
+    throw new Error(`扣子上传失败 [${res.status}]: ${json?.msg || JSON.stringify(json)}`);
+  }
+  return {
+    file_id: json.data.id,
+    bytes: json.data.bytes,
+    file_name: json.data.file_name
+  };
+}
+
 export function cozeConfigured(): boolean {
   return !!TOKEN;
 }

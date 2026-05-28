@@ -53,8 +53,10 @@
 | GET | `/api/app/eval/sessions/:id/result` | 拿测评报告(value1..value10 结构,**用于自渲染**) | ✅ |
 | POST | `/api/app/ai/upload-image` | 拍照/选本地图上传(返回 public URL) | ✅ |
 | POST | `/api/app/ai/chat` | **AI 聊天 SSE 流式**(扣子工作流,支持文字+图片+多轮) | ✅ |
+| POST | `/api/app/face-check/upload-media` | **多模态文件上传**(audio/video/script → 华为云 OBS) | ✅ |
+| POST | `/api/app/face-check/finalize` | **多模态评估完成**(生成 11 项分值 + 写学生档案) | ✅ |
 
-> 后续接口陆续补充: 导学历日历、心屿世界推荐、错题本、作文批改、人脸识别触发多模态等。
+> 后续接口陆续补充: 导学历日历、心屿世界推荐、错题本、作文批改等。
 
 ---
 
@@ -867,6 +869,216 @@ await for (final chunk in resp.stream.transform(utf8.decoder)) {
 3. **多轮记忆**:扣子工作流会读 `history`,所以 AI 能记住本会话之前的对话(类似 ChatGPT 同一会话)。但**清空 history = 新对话**。
 4. **流式中断**:如果用户切页/关闭对话,客户端断开请求即可,后端会自动 cleanup。
 5. **图片有效期**:Supabase Storage 存的图永久保留(直到学生注销),扣子那边 file_id 3 个月过期但不影响业务(URL 一直能访问)。
+
+---
+
+## 人脸识别 + 多模态评估
+
+学生在首页处于 `no_face` 状态时,点「解锁今日学习状态」卡 → 平板调用人脸识别 SDK + 录制 10 秒视频/音频 → 上传到华为云 OBS → 触发多模态评估 → 拿到「动力 / 压力 / 元气」等今日学习状态数据,首页变 `ready` 态。
+
+### 整体流程
+
+```
+平板端 (Flutter)
+├ 1. 启动人脸识别 / 录制 10s (audio.wav + video.mp4 + asr-text.txt)
+├ 2. 逐个上传文件:
+│    POST /api/app/face-check/upload-media (kind=audio/video/script)
+│    ↓ 返回 url + file_id
+└ 3. 触发评估:
+     POST /api/app/face-check/finalize body 带上一步的 url/file_id
+     ↓ 返回 multimodal + game (前端可直接更新首页 state)
+
+服务端
+├ 文件存储 — 华为云 OBS, 严格按发展猫文档路径:
+│   data/{XXL+7位}/{audio|video|script}/{timestamp}/{timestamp}{user_id}raw.{ext}
+├ 评分 — 一期本地查表生成 11 项分值 (后续二期接发展猫真接口)
+└ 学生档案 — 静默写 user_profiles.multimodal_latest (跟 AI 聊天一样不推前端)
+```
+
+---
+
+### POST `/api/app/face-check/upload-media` — 上传多模态文件
+
+```http
+POST /api/app/face-check/upload-media
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+(field: file = <binary>)
+(field: kind = "audio" | "video" | "script")
+```
+
+**file 字段要求**(按发展猫文档 3.1 规范):
+| kind | MIME 前缀 | 默认后缀 | 内容要求 | 最大 |
+|---|---|---|---|---|
+| `audio` | `audio/*` | `.wav` | 采样率 16kHz | 50 MB |
+| `video` | `video/*` | `.mp4` | 帧率 25fps | 500 MB |
+| `script` | `text/*` | `.txt` | UTF-8 编码 (一般是 ASR 转录文本) | 5 MB |
+
+**响应**(200):
+```jsonc
+{
+  "ok": true,
+  "url": "https://aiemotion.obs.cn-north-4.myhuaweicloud.com/data/XXL0000123/audio/20260528163025/20260528163025XXL0000123raw.wav",
+  "file_id": "20260528163025XXL0000123raw.wav",   // 喂发展猫 audio_id 用
+  "path": "/data/XXL0000123/audio/20260528163025/20260528163025XXL0000123raw.wav",
+  "timestamp": "20260528163025",
+  "kind": "audio",
+  "bytes": 156800,
+  "xxl_user_id": "XXL0000123"
+}
+```
+
+**错误码**:
+| HTTP | code | 说明 |
+|---|---|---|
+| 400 | `INVALID_KIND` | kind 必须是 audio/video/script |
+| 400 | `INVALID_TYPE` | 文件 MIME 不匹配 kind |
+| 400 | `MISSING_FILE` | file 字段缺失 |
+| 401 | `UNAUTHORIZED` | token 失效 |
+| 413 | `FILE_TOO_LARGE` | 超过 kind 对应的 maxSize |
+| 500 | `OBS_NOT_CONFIGURED` | 后端华为 OBS 未配置(管理员问题) |
+| 500 | `UPLOAD_FAILED` | OBS 上传失败 |
+
+**OBS 路径规范**(发展猫文档 3.1 节硬性要求):
+
+```
+data/{XXL_user_id}/{kind}/{timestamp}/{timestamp}{XXL_user_id}raw.{ext}
+
+示例:
+data/XXL0000123/audio/20260528163025/20260528163025XXL0000123raw.wav
+data/XXL0000123/video/20260528163025/20260528163025XXL0000123raw.mp4
+data/XXL0000123/script/20260528163025/20260528163025XXL0000123raw.txt
+```
+
+- `XXL_user_id`:学生固定编号 = `XXL` + `seq_no`(end_users 表的自增序号)补 7 位零
+- `timestamp`:**秒级**时间戳 `yyyyMMddHHmmss`
+- 文件名后缀 `raw`:原始上传(发展猫处理生成的中间文件后缀是 `processed`)
+
+---
+
+### POST `/api/app/face-check/finalize` — 完成多模态评估
+
+接收上一步上传的文件 URL/file_id,生成本次评估的 11 项分值并写入学生档案。
+
+```http
+POST /api/app/face-check/finalize
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "audio_url": "https://....wav",
+  "video_url": "https://....mp4",
+  "txt_url":   "https://....txt",
+  "audio_file_id": "20260528163025XXL0000123raw.wav",
+  "video_file_id": "20260528163025XXL0000123raw.mp4",
+  "txt_file_id":   "20260528163025XXL0000123raw.txt"
+}
+```
+
+**body 字段全部选填**:
+- 没传任何文件 → 后端仍会生成模拟分值(一期开发联调用)
+- 传了 file_id → 写入外部 JSON 用于审计与二期对接
+
+**响应**(200):
+```jsonc
+{
+  "ok": true,
+  "multimodal": {
+    "vitality": 86,                  // 动力 (综合分)
+    "stress": 12,                    // 压力 (越低越好)
+    "state_label": "极佳学习状态",
+    "level": 2,                      // 1-15
+    "comment": "今天状态全开...",
+    "keywords": ["高度专注","兴趣浓厚","续航在线"],
+    "evaluated_at": "2026-05-28T16:30:25.000Z"
+  },
+  "game": {
+    "name": "舒尔特方格",
+    "keywords": "专注、巩固、稳定",
+    "cover_url": null,
+    "duration_min": 3
+  },
+  "debug": {                          // 调试用, 一期返回, 生产可不展示
+    "raw_scores": { /* 11 项分值 */ },
+    "dimensions": { "concentration": 78, "stress": 88, "status": 75 },
+    "adjustments": [],
+    "external_json": { /* 按发展猫文档 3.2 格式 */ },
+    "mode": "local_simulation"        // 一期本地模拟, 二期接发展猫后变 "fazhanmao_real"
+  }
+}
+```
+
+**字段说明**:`multimodal` + `game` **完全等同**首页 `/api/app/home/today` ready 态返回的字段,前端直接用这个响应更新首页 state 即可,**不需要再调一次 today**。
+
+**错误码**:
+| HTTP | code | 说明 |
+|---|---|---|
+| 401 | `UNAUTHORIZED` | token 失效 |
+| 403 | `ACCOUNT_DISABLED` | 账号被禁用 |
+| 404 | `NOT_FOUND` | 学生不存在 |
+
+---
+
+### 完整集成示例(Flutter)
+
+```dart
+// Step 1: 录制 (平板原生 SDK, 这里假设已经拿到三个 File 对象)
+final audioFile = ...; // wav
+final videoFile = ...; // mp4
+final txtFile   = ...; // 可选: ASR 转录文本
+
+// Step 2: 并发上传三个文件
+final results = await Future.wait([
+  _uploadOne(audioFile, 'audio'),
+  _uploadOne(videoFile, 'video'),
+  if (txtFile != null) _uploadOne(txtFile, 'script'),
+]);
+
+// Step 3: 触发评估
+final finalize = await dio.post('/api/app/face-check/finalize',
+  data: {
+    'audio_url': results[0]['url'],
+    'video_url': results[1]['url'],
+    if (txtFile != null) 'txt_url': results[2]['url'],
+    'audio_file_id': results[0]['file_id'],
+    'video_file_id': results[1]['file_id'],
+    if (txtFile != null) 'txt_file_id': results[2]['file_id'],
+  },
+  options: Options(headers: {'Authorization': 'Bearer $token'}),
+);
+
+// Step 4: 用 finalize.data['multimodal'] 直接更新首页 state
+setState(() {
+  homeMultimodal = finalize.data['multimodal'];
+  homeGame = finalize.data['game'];
+  homeStatus = 'ready';
+});
+
+// 辅助: 上传单个文件
+Future<Map> _uploadOne(File f, String kind) async {
+  final form = FormData.fromMap({
+    'file': await MultipartFile.fromFile(f.path),
+    'kind': kind,
+  });
+  final resp = await dio.post('/api/app/face-check/upload-media',
+    data: form, options: Options(headers: {'Authorization': 'Bearer $token'}));
+  return resp.data;
+}
+```
+
+### 业务规则
+
+- **每日一次**:多模态评估**每天**做一次,做完首页就 `ready` 直到第二天
+- **重做**:如果学生想重做(比如刚才录得不好),再调一次 `finalize` 即可,后端覆盖 `user_profiles.multimodal_latest`
+- **历史累积**:每次评估的完整数据也存到 `multimodal_history` 数组,供个人中心的「24小时专注度曲线」(图10)使用
+- **跳过文件**(测试模式):一期允许不传任何文件直接调 finalize → 后端随机模拟分(联调期间方便)
+
+### 二期 TODO(等真接口)
+
+- 接发展猫 API `http://gpu.fazhanmao.com:9096/system/learning_ability/get_file_paths` 拿真实 11 项分值
+- 启动判别:`status === "ok"` → 用真分;否则降级到本地模拟
+- `debug.mode` 变成 `fazhanmao_real`
 
 ---
 

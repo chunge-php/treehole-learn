@@ -9,7 +9,7 @@
  */
 import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { streamWorkflow, runWorkflow } from "@/lib/coze/client";
+import { streamWorkflow, runWorkflow, uploadFileToCoze } from "@/lib/coze/client";
 import { buildSystemPrompt } from "@/app/(admin)/tests/ai-chat/actions";
 import { updateProfileFromChat, mergeProfileUpdate } from "@/lib/profile/sync";
 import { adminSupabase } from "@/lib/supabase/admin";
@@ -127,6 +127,18 @@ export async function POST(req: NextRequest) {
           .filter(m => m && (m.role === "user" || m.role === "assistant") && m.content)
           .map(m => (m.role === "user" ? "学生: " : "导师: ") + m.content)
           .join("\n\n");
+        // 图片处理: 本地/内网 URL 扣子云端 fetch 不到, 先后端 fetch → 上传到扣子拿 file_id
+        // (无论本地 localhost / 内网 192.x / 公网 URL 都统一走这条路, 简单一致)
+        let cozeImageParam: any = undefined;
+        if (imageUrl) {
+          const fileRes = await fetch(imageUrl);
+          if (!fileRes.ok) throw new Error(`后端拉取图片失败 [${fileRes.status}]: ${imageUrl}`);
+          const blob = await fileRes.blob();
+          const filename = imageUrl.split("/").pop()?.split("?")[0] || "image.png";
+          const { file_id } = await uploadFileToCoze(blob, filename);
+          cozeImageParam = JSON.stringify({ file_id });   // 扣子 File 字段 object_string 格式
+        }
+
         for await (const evt of streamWorkflow({
           workflowId,
           parameters: {
@@ -134,7 +146,7 @@ export async function POST(req: NextRequest) {
             user_message: userMessage || "(看图说话)",
             history: historyText,
             student_name: studentName,
-            ...(imageUrl ? { image: imageUrl } : {})    // 扣子 image 字段, 直接传公网 URL
+            ...(cozeImageParam ? { image: cozeImageParam } : {})
           }
         })) {
           if (evt.type === "delta") {

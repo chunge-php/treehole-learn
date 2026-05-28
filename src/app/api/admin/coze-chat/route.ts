@@ -150,7 +150,10 @@ export async function POST(req: NextRequest) {
               send("delta", { text: full });
             }
 
-            // 同步 await 完成档案抽取 + merge, 让前端收到 profile_updated 后再收 done
+            // 档案写入: updateProfileFromChat 和 mergeProfileUpdate 内部各自走
+            // 「学生级串行队列」(见 src/lib/queue.ts), 同学生的多次写入严格按
+            // 入队顺序串行。用户连发消息时, 后一条的写入会自动等前一条完成,
+            // 避免数据竞争。这里不需要再额外包队列, 否则嵌套同 key 会死锁。
             if (full) {
               try {
                 await updateProfileFromChat({

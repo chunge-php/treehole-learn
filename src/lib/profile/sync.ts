@@ -4,6 +4,7 @@
  */
 import { adminSupabase } from "@/lib/supabase/admin";
 import type { EvaluationResult } from "@/lib/multimodal/scoring";
+import { enqueueByKey } from "@/lib/queue";
 
 type Source = "multimodal" | "report" | "other";
 
@@ -16,8 +17,16 @@ async function appendSourceLog(end_user_id: string, source: Source, by: string |
   return log.slice(0, 50);
 }
 
-/** 多模态测评完成 → 更新档案 */
+/** 多模态测评完成 → 更新档案 (内部走队列, 同学生串行) */
 export async function updateProfileFromMultimodal(input: {
+  end_user_id: string;
+  result: EvaluationResult;
+  externalJson: Record<string, any>;
+  by?: string | null;
+}) {
+  return enqueueByKey(`profile:${input.end_user_id}`, () => _updateProfileFromMultimodal(input));
+}
+async function _updateProfileFromMultimodal(input: {
   end_user_id: string;
   result: EvaluationResult;
   externalJson: Record<string, any>;
@@ -71,6 +80,14 @@ export async function updateProfileFromMultimodal(input: {
  *    value9/10 整体结论与建议         → report_latest.summary.结论 / 建议
  */
 export async function updateProfileFromReport(input: {
+  end_user_id: string;
+  report_data: any;
+  session_id: string;
+  by?: string | null;
+}) {
+  return enqueueByKey(`profile:${input.end_user_id}`, () => _updateProfileFromReport(input));
+}
+async function _updateProfileFromReport(input: {
   end_user_id: string;
   report_data: any;
   session_id: string;
@@ -150,6 +167,13 @@ export async function mergeProfileUpdate(input: {
   update: any;
   by?: string | null;
 }): Promise<string[]> {
+  return enqueueByKey(`profile:${input.end_user_id}`, () => _mergeProfileUpdate(input));
+}
+async function _mergeProfileUpdate(input: {
+  end_user_id: string;
+  update: any;
+  by?: string | null;
+}): Promise<string[]> {
   const sb = adminSupabase();
   const { end_user_id, update, by = null } = input;
   if (!update || typeof update !== "object") return [];
@@ -221,8 +245,16 @@ export async function mergeProfileUpdate(input: {
   return changed;
 }
 
-/** AI 聊天完成一轮 → 累积到 ai_history (滑动窗口 20 条 + 计数 + 最近时间) */
+/** AI 聊天完成一轮 → 累积到 ai_history (滑动窗口 20 条 + 计数 + 最近时间, 内部走队列) */
 export async function updateProfileFromChat(input: {
+  end_user_id: string;
+  user_message: string;
+  assistant_message: string;
+  by?: string | null;
+}) {
+  return enqueueByKey(`profile:${input.end_user_id}`, () => _updateProfileFromChat(input));
+}
+async function _updateProfileFromChat(input: {
   end_user_id: string;
   user_message: string;
   assistant_message: string;

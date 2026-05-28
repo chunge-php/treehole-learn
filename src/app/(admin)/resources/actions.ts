@@ -187,10 +187,24 @@ export async function bulkImportResources(rows: Record<string, any>[]) {
 export async function listCategories() {
   requireAdmin();
   const sb = adminSupabase();
+  // 一次拿全部 (一级+二级), 客户端 join, 给二级附加父级名做 hint
   const { data } = await sb.from("top_types")
-    .select("id, name, parent_id")
-    .not("parent_id", "is", null)
+    .select("id, name, parent_id, sort_order")
+    .eq("status", "active")
     .order("sort_order", { ascending: true });
-  return data || [];
+  const rows = data || [];
+  const parentNameMap = new Map(
+    rows.filter((c: any) => !c.parent_id).map((c: any) => [c.id, c.name as string])
+  );
+  // 按父分组排序: 同一父级下的二级聚在一起
+  return rows
+    .filter((c: any) => c.parent_id)
+    .map((c: any) => ({
+      id: c.id as string,
+      name: c.name as string,
+      parent_id: c.parent_id as string,
+      parent_name: parentNameMap.get(c.parent_id) || null
+    }))
+    .sort((a, b) => (a.parent_name || "").localeCompare(b.parent_name || ""));
 }
 

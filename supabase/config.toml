@@ -14,9 +14,22 @@ major_version = 15
 enabled = true
 sql_paths = ["./seed.sql", "./seed_assessments.sql"]
 
+# 显式锁定全部端口到 46xxx 段, 避免使用 supabase 默认端口跟其他本地项目 (如 bb365 用 56xxx 段) 冲突
+[db.pooler]
+enabled = false
+port = 46429
+
 [studio]
 enabled = true
 port = 46423
+
+[inbucket]
+enabled = true
+port = 46424
+
+[analytics]
+enabled = false
+port = 46427
 
 [auth]
 enabled = true

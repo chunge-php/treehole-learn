@@ -171,9 +171,16 @@ export async function saveAnswer(sessionId: string, assessmentId: string, answer
   const completed = total > 0 && answered >= total;
 
   const patch: any = { answered_count: answered, updated_at: new Date().toISOString() };
-  if (completed && sess.status !== "completed") { patch.status = "completed"; patch.completed_at = new Date().toISOString(); }
+  const justCompleted = completed && sess.status !== "completed";
+  if (justCompleted) { patch.status = "completed"; patch.completed_at = new Date().toISOString(); }
   if (!completed && sess.status === "completed") { patch.status = "in_progress"; patch.completed_at = null; }
   await sb.from("report_sessions").update(patch).eq("id", sessionId);
+
+  // 状态刚翻成 completed → 立刻生成报告 + 同步学生档案
+  if (justCompleted) {
+    try { await generateSessionReport(sessionId); }
+    catch (e) { console.error("[report] auto-finalize failed:", e); }
+  }
 
   return { answered, total, completed, extend: extend_json ?? null };
 }
@@ -233,6 +240,12 @@ export async function quickFillAnswers(sessionId: string) {
     completed_at: completed ? new Date().toISOString() : null,
     updated_at: new Date().toISOString()
   }).eq("id", sessionId);
+
+  // 一键答完 → 立刻生成报告 + 同步学生档案
+  if (completed) {
+    try { await generateSessionReport(sessionId); }
+    catch (e) { console.error("[report] quickFill auto-finalize failed:", e); }
+  }
 
   revalidatePath("/tests/reports");
   return { answers: answerMap, answered, total, completed, filled: toInsert.length };

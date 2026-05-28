@@ -39,9 +39,11 @@ export async function POST(req: NextRequest) {
 
   // 渲染 system prompt
   let systemPrompt = "";
+  let studentName = "";
   try {
-    const { full } = await buildSystemPrompt({ end_user_id: endUserId, template_id: templateId });
-    systemPrompt = full;
+    const built = await buildSystemPrompt({ end_user_id: endUserId, template_id: templateId });
+    systemPrompt = built.full;
+    studentName = built.student_name;
   } catch (e: any) {
     return new Response(`渲染提示词失败: ${e?.message || e}`, { status: 500 });
   }
@@ -54,7 +56,8 @@ export async function POST(req: NextRequest) {
       };
       let full = "";
       try {
-        // 历史对话拼成文本; 扣子工作流大模型节点 prompt 模板里用 {{history_text}} 引用
+        // 历史对话拼成文本; 扣子工作流大模型节点 prompt 模板里 {{history}} 引用
+        // 扣子开始节点 history 字段需配为 String 类型
         const historyText = (history as any[])
           .filter(m => m && (m.role === "user" || m.role === "assistant") && m.content)
           .map(m => (m.role === "user" ? "学生: " : "导师: ") + m.content)
@@ -64,8 +67,8 @@ export async function POST(req: NextRequest) {
           parameters: {
             system_prompt: systemPrompt,
             user_message: userMessage,
-            history_text: historyText,
-            history,                    // 同时传数组备用 (若工作流后续切到 messages 模式可用)
+            history: historyText,
+            student_name: studentName,
           }
         })) {
           if (evt.type === "delta") {

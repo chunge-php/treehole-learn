@@ -65,5 +65,11 @@ export async function buildSystemPrompt(input: { end_user_id: string; template_i
     prefix_rendered,
     (tpl as any).rules || ""
   ].filter(Boolean).join("\n\n");
-  return { system_role: (tpl as any).system_role, prefix_rendered, rules: (tpl as any).rules, full };
+  return {
+    system_role: (tpl as any).system_role,
+    prefix_rendered,
+    rules: (tpl as any).rules,
+    full,
+    student_name: (eu as any).name as string
+  };
 }

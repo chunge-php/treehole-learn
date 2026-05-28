@@ -60,6 +60,10 @@
 | POST | `/api/app/assignments` | **智能添加作业**(学生 App 端,设计图 9) | ✅ |
 | GET | `/api/app/assignments/:id` | 任务详情(支持 3 种 task_type) | ✅ |
 | POST | `/api/app/assignments/:id/complete` | 标记任务完成 / 取消完成 | ✅ |
+| POST | `/api/app/study-session/start` | 进入 App 启动学习时长会话 | ✅ |
+| POST | `/api/app/study-session/heartbeat` | 心跳上报(每 30s)| ✅ |
+| POST | `/api/app/study-session/end` | 退出登录/离开页面时结束会话 | ✅ |
+| GET | `/api/app/study-session/today` | 拿当日累计学习时长(供首页/个人中心展示) | ✅ |
 
 > 后续接口陆续补充: 心屿世界推荐、错题本、作文批改等。
 
@@ -1423,6 +1427,210 @@ await dio.post('/api/app/assignments/$taskId/complete', data: {
 - **完成是单次**:`completed_at` 不为 null 即视为完成,可以"取消完成"重新置为 null
 - **学科默认值**:`subject` 为 null 时归"作业"(前端展示用)
 - **推荐任务**:目前 `source = recommendation` 是预留,后期心屿世界第三方接通时,后端会自动写入,前端代码不用动
+
+---
+
+## 学习时长 (心跳计时)
+
+学生登录 App 后自动开始计时,只要"在线"就累加,退出/超时停止。设计用于首页 + 个人中心展示「今日已学 32 分钟」。
+
+### 计时规则
+
+- 登录后(进入主页时)调 `/start` 获得 `session_id`
+- 每 **30 秒** 调一次 `/heartbeat` 上报存活
+- 退出登录 / 关闭 App / 切到后台超过 2 分钟 → 调 `/end`(或服务端自动判定离线)
+- **心跳超时 2 分钟未上报** → 服务端自动 close 该 session(用 last_heartbeat_at 作为 ended_at)
+- 一个学生**同时只允许一个 active session**(防止多设备/双开重复计时;`/start` 会自动 close 旧的)
+
+### 全局状态机
+
+```
+App 主页 onMounted
+   ↓ POST /start
+   active session
+   ┌─────────────┐
+   │ 每 30s 心跳 │ ← 一直在主页/导学历/聊天等任何业务页
+   └─────────────┘
+   ↓ (用户主动登出 / Tab 关闭 / 切后台 2 分钟)
+   POST /end
+   ↓
+   session_ended
+```
+
+---
+
+### POST `/api/app/study-session/start`
+
+```http
+POST /api/app/study-session/start
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "device_info": {
+    "brand": "Apple",
+    "model": "iPad Air 5",
+    "os_version": "iPadOS 17.5",
+    "app_version": "1.0.0"
+  }
+}
+```
+
+`device_info` 选填,后端原样存档,便于排查问题。
+
+**响应**:
+```jsonc
+{
+  "ok": true,
+  "session_id": "sss_xxx",                  // 后续 heartbeat / end 用
+  "started_at": "2026-05-28T16:00:00.000Z",
+  "today_total_sec": 1234                    // 当日累计 (含本次 + 之前已结束的)
+}
+```
+
+> 如果学生此前有未结束的 session(比如上次 App 闪退没调 end),后端会**自动 close** 那些 stale session 用其 last_heartbeat_at 作为 ended_at。
+
+---
+
+### POST `/api/app/study-session/heartbeat`
+
+```http
+POST /api/app/study-session/heartbeat
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "session_id": "sss_xxx" }
+```
+
+**响应**:
+```jsonc
+{
+  "ok": true,
+  "session_duration_sec": 87,         // 本次 session 累计
+  "today_total_sec": 1321              // 当日累计 (含其他 session)
+}
+```
+
+**错误码**:
+| HTTP | code | 说明 |
+|---|---|---|
+| 400 | `MISSING_FIELDS` | session_id 缺失 |
+| 401 | `UNAUTHORIZED` | token 失效 |
+| 403 | `NOT_OWNER` | session 不属于本学生 |
+| 410 | `SESSION_ENDED` | session 已结束或不存在 → **客户端应重新调 `/start`** |
+
+**前端处理**:
+- `Timer.periodic(Duration(seconds: 30), () => heartbeat())`
+- 收到 410 `SESSION_ENDED` → 自动重新 `/start` 拿新 session_id
+- App 切后台时 timer 暂停;切回前台立即调一次心跳
+
+---
+
+### POST `/api/app/study-session/end`
+
+```http
+POST /api/app/study-session/end
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "session_id": "sss_xxx" }
+```
+
+**响应**:同 heartbeat 字段(`session_duration_sec` + `today_total_sec`)。
+
+幂等:已结束的 session 再调返回当前状态不报错;不存在的返 410。
+
+**调用时机**(任一即可):
+- 用户主动点退出登录 → `await dio.post('/end')` → 清 token → 跳登录页
+- App lifecycle `onPaused` / `onDetached`(Flutter `WidgetsBindingObserver.didChangeAppLifecycleState`)
+- 切后台超过一定时间(可选)
+
+---
+
+### GET `/api/app/study-session/today`
+
+无 body,**只读**接口,首页 / 个人中心刷新时拿当日学习时长。
+
+```http
+GET /api/app/study-session/today
+Authorization: Bearer <token>
+```
+
+**响应**:
+```jsonc
+{
+  "ok": true,
+  "today_total_sec": 1923,        // 当日累计秒数
+  "session_count": 3,             // 今天进入过几次 App (含 active)
+  "has_active": true              // 当前是否有活动中的 session
+}
+```
+
+设计图 10 个人中心的「今日已学 32 分钟」即用 `Math.floor(today_total_sec / 60)` 格式化展示。
+
+---
+
+### Flutter 完整集成示例
+
+```dart
+class StudySessionManager {
+  String? _sessionId;
+  Timer? _timer;
+  final Dio dio;
+  final String baseUrl;
+  final String Function() getToken;
+
+  StudySessionManager({required this.dio, required this.baseUrl, required this.getToken});
+
+  Future<void> start() async {
+    final r = await dio.post('$baseUrl/api/app/study-session/start',
+      data: { 'device_info': await _collectDeviceInfo() },
+      options: Options(headers: { 'Authorization': 'Bearer ${getToken()}' }),
+    );
+    _sessionId = r.data['session_id'];
+    _startHeartbeat();
+  }
+
+  void _startHeartbeat() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _heartbeat());
+  }
+
+  Future<void> _heartbeat() async {
+    if (_sessionId == null) return;
+    try {
+      await dio.post('$baseUrl/api/app/study-session/heartbeat',
+        data: { 'session_id': _sessionId },
+        options: Options(headers: { 'Authorization': 'Bearer ${getToken()}' }),
+      );
+    } on DioException catch (e) {
+      // 410 SESSION_ENDED → 重新 start
+      if (e.response?.statusCode == 410) await start();
+    }
+  }
+
+  Future<void> end() async {
+    _timer?.cancel();
+    _timer = null;
+    if (_sessionId == null) return;
+    await dio.post('$baseUrl/api/app/study-session/end',
+      data: { 'session_id': _sessionId },
+      options: Options(headers: { 'Authorization': 'Bearer ${getToken()}' }),
+    );
+    _sessionId = null;
+  }
+
+  // App lifecycle 钩子
+  void onAppResumed() { _heartbeat(); _startHeartbeat(); }
+  void onAppPaused()  { _timer?.cancel(); /* 短暂切后台不立刻 end, 服务端会超时 */ }
+}
+```
+
+App 启动后 `studySession.start()`,退出登录前 `await studySession.end()`,期间不用管。
+
+### 后台展示
+
+后台 / 家长小程序需要这个数据时,直接走 `student_study_sessions` 表 SQL 聚合即可(已加索引)。给小程序家长端用的接口后续单独抛 `/api/mp/study-session/*`(memory 中规划过)。
 
 ---
 

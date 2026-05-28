@@ -7,23 +7,46 @@ import { Combobox } from "@/components/ui/combobox";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, User, Phone, GraduationCap, Building2, BarChart3, ListChecks, FileBarChart, Sparkles, History, FileJson, Eye } from "lucide-react";
-import { getStudentDossier, type StudentOpt, type StudentDossier } from "../actions";
+import { Loader2, User, Phone, GraduationCap, Building2, BarChart3, ListChecks, FileBarChart, Sparkles, History, FileJson, Eye, RefreshCw } from "lucide-react";
+import { getStudentDossier, resetStudentProfile, type StudentOpt, type StudentDossier } from "../actions";
+import { ConfirmDialog } from "@/components/admin/ConfirmDialog";
 import { toast } from "sonner";
 
 export function ProfileViewerClient({ students, initialId }: { students: StudentOpt[]; initialId: string }) {
   const [studentId, setStudentId] = useState(initialId);
   const [dossier, setDossier] = useState<StudentDossier | null>(null);
   const [loading, startLoad] = useTransition();
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, startReset] = useTransition();
+
+  function refreshDossier() {
+    if (!studentId) return;
+    startLoad(async () => {
+      try { setDossier(await getStudentDossier(studentId)); }
+      catch (e: any) { toast.error(e?.message || "加载失败"); }
+    });
+  }
+
+  function doReset() {
+    if (!studentId) return;
+    startReset(async () => {
+      try {
+        const r = await resetStudentProfile(studentId);
+        if (r.ok) {
+          toast.success(r.message + (r.rebuilt_from_report ? ` (来源 ${r.rebuilt_from_report})` : ""));
+          setResetOpen(false);
+          refreshDossier();
+        } else {
+          toast.error(r.message);
+        }
+      } catch (e: any) { toast.error(e?.message || "重置失败"); }
+    });
+  }
 
   useEffect(() => {
     if (!studentId) { setDossier(null); return; }
-    startLoad(async () => {
-      try {
-        const d = await getStudentDossier(studentId);
-        setDossier(d);
-      } catch (e: any) { toast.error(e?.message || "加载失败"); }
-    });
+    refreshDossier();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);
 
   return (
@@ -77,11 +100,17 @@ export function ProfileViewerClient({ students, initialId }: { students: Student
                   <Info icon={User} label="家长" value={[dossier.student.parent_name, dossier.student.parent_phone].filter(Boolean).join(" / ") || "—"} />
                 </div>
               </div>
-              {dossier.profile?.updated_at && (
-                <div className="text-xs text-muted-foreground">
-                  档案更新: {new Date(dossier.profile.updated_at).toLocaleString("zh-CN", { hour12: false })}
-                </div>
-              )}
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                {dossier.profile?.updated_at && (
+                  <div className="text-xs text-muted-foreground">
+                    档案更新: {new Date(dossier.profile.updated_at).toLocaleString("zh-CN", { hour12: false })}
+                  </div>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setResetOpen(true)} disabled={resetting}>
+                  {resetting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  重置档案
+                </Button>
+              </div>
             </div>
           </Card>
 
@@ -227,6 +256,17 @@ export function ProfileViewerClient({ students, initialId }: { students: Student
               </Card>
             </TabsContent>
           </Tabs>
+
+          <ConfirmDialog
+            open={resetOpen}
+            onOpenChange={v => !v && !resetting && setResetOpen(false)}
+            title="重置学生档案"
+            description={`确定清空「${dossier.student.name}」的档案并从最近一次测评报告自动重建? 多模态最近结果会丢失, 需重新做一次多模态测试。AI 对话历史 (ai_history.recent_chats) 也会清空。`}
+            destructive
+            loading={resetting}
+            confirmText="重置"
+            onConfirm={doReset}
+          />
         </>
       )}
     </div>

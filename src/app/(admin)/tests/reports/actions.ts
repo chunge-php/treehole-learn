@@ -241,14 +241,38 @@ export async function quickFillAnswers(sessionId: string) {
     updated_at: new Date().toISOString()
   }).eq("id", sessionId);
 
-  // 一键答完 → 立刻生成报告 + 同步学生档案
+  // 一键答完 → 立刻生成报告 + 同步学生档案, 把结果回传前端做 toast
+  let profileSync: { ok: boolean; message: string; fields: string[] } | null = null;
   if (completed) {
-    try { await generateSessionReport(sessionId); }
-    catch (e) { console.error("[report] quickFill auto-finalize failed:", e); }
+    try {
+      await generateSessionReport(sessionId);
+      // 拿同步后的 user_profiles 看看实际有哪些字段填上了 (供前端展示)
+      const { data: prof } = await sb.from("user_profiles")
+        .select("basic, psychology, report_latest")
+        .eq("end_user_id", sess.end_user_id || "")
+        .maybeSingle();
+      const filled: string[] = [];
+      if ((prof as any)?.basic?.["学生类型"]) filled.push("basic.学生类型");
+      if ((prof as any)?.basic?.["八格类型"]) filled.push("basic.八格类型");
+      if ((prof as any)?.psychology?.["焦虑等级"]) filled.push("psychology.焦虑等级");
+      if ((prof as any)?.psychology?.["焦虑分数"]) filled.push("psychology.焦虑分数");
+      if ((prof as any)?.psychology?.["情绪"]) filled.push("psychology.情绪");
+      if ((prof as any)?.report_latest) filled.push("report_latest");
+      profileSync = {
+        ok: filled.length > 0,
+        message: filled.length > 0
+          ? `已同步 ${filled.length} 项到学生档案`
+          : "报告完成, 但未识别到可同步字段 (检查 end_user_id 是否关联)",
+        fields: filled
+      };
+    } catch (e: any) {
+      console.error("[report] quickFill auto-finalize failed:", e);
+      profileSync = { ok: false, message: `档案同步失败: ${e?.message || e}`, fields: [] };
+    }
   }
 
   revalidatePath("/tests/reports");
-  return { answers: answerMap, answered, total, completed, filled: toInsert.length };
+  return { answers: answerMap, answered, total, completed, filled: toInsert.length, profileSync };
 }
 
 /** 用测试语音作答语音题 (调发展猫拿真实焦虑分) */

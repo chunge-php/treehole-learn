@@ -1,6 +1,8 @@
 "use server";
+import { revalidatePath } from "next/cache";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth";
+import { updateProfileFromReport } from "@/lib/profile/sync";
 
 export type StudentOpt = {
   id: string; name: string; phone: string; grade: string;
@@ -63,4 +65,47 @@ export async function getStudentDossier(end_user_id: string): Promise<StudentDos
       has_report: !!r.report_data
     }))
   };
+}
+
+/** 重置学生档案: 删除 user_profiles 整行, 然后从最近一条已完成的报告自动重建 */
+export async function resetStudentProfile(end_user_id: string): Promise<{
+  ok: boolean;
+  message: string;
+  rebuilt_from_report?: string;
+}> {
+  const s = requireAdmin();
+  const sb = adminSupabase();
+
+  // 1. 删除整行
+  const { error: delErr } = await sb.from("user_profiles").delete().eq("end_user_id", end_user_id);
+  if (delErr) return { ok: false, message: `删除失败: ${delErr.message}` };
+
+  // 2. 找最近一条已完成 + 有 report_data 的测评 → 自动重建
+  const { data: latestReport } = await sb.from("report_sessions")
+    .select("id, code, report_data, completed_at")
+    .eq("end_user_id", end_user_id)
+    .eq("status", "completed")
+    .not("report_data", "is", null)
+    .order("completed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestReport?.report_data) {
+    try {
+      await updateProfileFromReport({
+        end_user_id,
+        report_data: latestReport.report_data,
+        session_id: latestReport.id,
+        by: s.account_id
+      });
+      revalidatePath("/tests/profile");
+      return { ok: true, message: "档案已重置并基于最近一次测评报告重建", rebuilt_from_report: latestReport.code || latestReport.id };
+    } catch (e: any) {
+      revalidatePath("/tests/profile");
+      return { ok: true, message: `档案已清空, 但从测评报告重建失败: ${e?.message || e}` };
+    }
+  }
+
+  revalidatePath("/tests/profile");
+  return { ok: true, message: "档案已清空 (该学生暂无已完成的测评报告, 未触发重建)" };
 }

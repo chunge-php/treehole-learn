@@ -96,6 +96,18 @@ export function AnswerRunner({
         setAnswers(r.answers);
         setQuickOpen(false);
         toast.success(`已自动填充 ${r.filled} 题, 全部 ${r.answered}/${r.total} 题完成`);
+        // 档案同步反馈 (单独一条 toast, 让用户能看到具体哪些字段同步进去了)
+        const sync = (r as any).profileSync;
+        if (sync) {
+          if (sync.ok) {
+            toast.success(
+              `📋 ${sync.message}${sync.fields?.length ? ": " + sync.fields.join(", ") : ""}`,
+              { duration: 5000 }
+            );
+          } else {
+            toast.warning(`⚠️ ${sync.message}`, { duration: 6000 });
+          }
+        }
       } catch (e: any) {
         toast.error(e?.message || "操作失败");
       }

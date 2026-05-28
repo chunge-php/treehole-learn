@@ -51,8 +51,10 @@
 | GET | `/api/app/eval/sessions/:id` | 拿测评会话详情(题目 + 已答 map) | ✅ |
 | POST | `/api/app/eval/sessions/:id/answer` | 提交单题作答(完成时自动同步学生档案) | ✅ |
 | GET | `/api/app/eval/sessions/:id/result` | 拿测评报告(value1..value10 结构,**用于自渲染**) | ✅ |
+| POST | `/api/app/ai/upload-image` | 拍照/选本地图上传(返回 public URL) | ✅ |
+| POST | `/api/app/ai/chat` | **AI 聊天 SSE 流式**(扣子工作流,支持文字+图片+多轮) | ✅ |
 
-> 后续接口陆续补充: 导学历日历、AI 聊天 SSE 流、心屿世界推荐、错题本、作文批改、人脸识别触发多模态等。
+> 后续接口陆续补充: 导学历日历、心屿世界推荐、错题本、作文批改、人脸识别触发多模态等。
 
 ---
 
@@ -660,6 +662,211 @@ for (final q in questions) {
 final result = await api.get('/api/app/eval/sessions/$sessionId/result');
 renderReport(result['report']);   // 用 value1..value10 渲染
 ```
+
+---
+
+## AI 聊天 (流式 SSE + 拍照讲解)
+
+学生跟 AI 学习导师对话,**流式逐字输出**,支持多轮对话 + 拍照解题。后端走扣子工作流,学生档案在后台静默更新(学生**不会**看到"档案已更新"系统提示)。
+
+### 整体流程
+
+```
+学生输入文字 (+ 可选拍照)
+    ↓
+(可选) POST /api/app/ai/upload-image  ← 拍照场景: 先上传拿 URL
+    ↓ url
+POST /api/app/ai/chat  body: {user_message, image_url, history}
+    ↓ SSE 流
+逐字推送 AI 回复
+    ↓
+done 事件 → 完整文本
+    ↓ (后台静默)
+学生档案 user_profiles 累积更新 (ai_history / knowledge / psychology 等)
+```
+
+---
+
+### POST `/api/app/ai/upload-image` — 拍照/选本地图上传
+
+学生在 AI 聊天页要"拍照解题"时,先调这个接口拿 URL,再带着 url 调聊天接口。
+
+```http
+POST /api/app/ai/upload-image
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+(field: file = <image binary>)
+```
+
+**响应**(200):
+```jsonc
+{
+  "ok": true,
+  "url": "http://192.168.101.44:46421/storage/v1/object/public/th-media/chat/eu_xxx/202605/abc123.png",
+  "name": "题目截图.png",
+  "type": "image/png",
+  "size": 234567
+}
+```
+
+**错误码**:
+| HTTP | code | 说明 |
+|---|---|---|
+| 400 | `MISSING_FILE` / `INVALID_TYPE` / `INVALID_FORM` | 字段错 / 不是图片 / 非 multipart |
+| 401 | `UNAUTHORIZED` | token 失效 |
+| 413 | `FILE_TOO_LARGE` | 超过 10MB |
+| 500 | `UPLOAD_FAILED` | 上传到 Supabase 失败 |
+
+**限制**:
+- 仅支持图片 (`image/*` MIME)
+- 最大 **10 MB**(超过 413)
+- 存储路径:`th-media/chat/<student_id>/<yyyymm>/<random>.<ext>`,公开可读
+
+---
+
+### POST `/api/app/ai/chat` — AI 聊天 SSE
+
+```http
+POST /api/app/ai/chat
+Authorization: Bearer <token>
+Content-Type: application/json
+Accept: text/event-stream
+
+{
+  "user_message": "帮我讲讲二元一次方程怎么消元",
+  "image_url": "http://.../some-image.png",            // 选填: 拍照解题时带
+  "history": [                                          // 选填: 多轮对话历史
+    { "role": "user",      "content": "之前的问题..." },
+    { "role": "assistant", "content": "之前的回答..." }
+  ]
+}
+```
+
+**body 字段**:
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `user_message` | string | ✅(无图时) | 学生本轮文字提问;**有 image_url 时可为空**(纯看图) |
+| `image_url` | string | ❌ | 上面接口拿到的 URL(后端会自动转扣子 file_id 给视觉模型看) |
+| `history` | `[{role,content}]` | ❌ | 之前的多轮对话(role: `user` / `assistant`);**前端自己维护**,每次发送把累积的对话传过来 |
+
+> 至少 `user_message` 和 `image_url` 有一个,否则 400 `MISSING_FIELDS`
+
+**响应**:`Content-Type: text/event-stream`,SSE 格式
+
+```
+event: delta
+data: {"text":"二元一次方程组"}
+
+event: delta
+data: {"text":"的核心是消元——"}
+
+event: delta
+data: {"text":"把两个未知数变成一个..."}
+
+...
+
+event: done
+data: {"full":"完整 Markdown 格式的 AI 回复..."}
+```
+
+**事件类型**:
+| event | data | 说明 |
+|---|---|---|
+| `delta` | `{ text: string }` | AI 回复的**增量片段**(前端累积拼接) |
+| `done` | `{ full: string }` | 流式结束,带本次完整回复 |
+| `error` | `{ message: string }` | 出错(扣子调用失败 / 图片处理失败 等),流会立即关闭 |
+
+> ⚠️ App 端**不会**收到 `profile_updated` 事件(那是测试中心专用)。学生档案在后台静默更新,学生无感知。
+
+**错误码**(401/400 直接返回 JSON,不是 SSE):
+| HTTP | code | 说明 |
+|---|---|---|
+| 400 | `MISSING_FIELDS` | user_message 和 image_url 都空 |
+| 401 | `UNAUTHORIZED` | token 失效 |
+| 404 | `NOT_FOUND` | 学生记录不存在 |
+| 500 | `SERVER_NOT_READY` | 后端扣子配置缺失(管理员问题,非业务错) |
+| 500 | `PROMPT_BUILD_FAILED` | 拼提示词失败 |
+
+**SSE 内 error 事件**(已建立流式后出错):
+SSE 已开始流式 → 出错时**不会**变 HTTP 状态码,而是推一个 `event: error` 事件,然后正常 close。前端要监听 `error` 事件做兜底。
+
+---
+
+### 完整集成示例(Flutter)
+
+```dart
+// Step 1 (可选): 拍照上传
+String? imageUrl;
+if (pickedImage != null) {
+  final formData = FormData.fromMap({
+    'file': MultipartFile.fromFileSync(pickedImage.path),
+  });
+  final upload = await dio.post('/api/app/ai/upload-image',
+    data: formData,
+    options: Options(headers: { 'Authorization': 'Bearer $token' }),
+  );
+  imageUrl = upload.data['url'];
+}
+
+// Step 2: SSE 调聊天接口
+final req = http.Request('POST', Uri.parse('${baseUrl}/api/app/ai/chat'));
+req.headers.addAll({
+  'Authorization': 'Bearer $token',
+  'Content-Type': 'application/json',
+  'Accept': 'text/event-stream',
+});
+req.body = jsonEncode({
+  'user_message': inputText,
+  'image_url': imageUrl,
+  'history': chatHistory.map((m) => {'role': m.role, 'content': m.content}).toList(),
+});
+
+final resp = await req.send();
+String full = "";
+String? buffer = "";
+await for (final chunk in resp.stream.transform(utf8.decoder)) {
+  buffer = buffer! + chunk;
+  // 按 \n\n 切 SSE 事件
+  while (buffer!.contains("\n\n")) {
+    final idx = buffer.indexOf("\n\n");
+    final evt = buffer.substring(0, idx);
+    buffer = buffer.substring(idx + 2);
+    String? event;
+    String? dataStr;
+    for (final line in evt.split("\n")) {
+      if (line.startsWith("event:")) event = line.substring(6).trim();
+      else if (line.startsWith("data:")) dataStr = line.substring(5).trim();
+    }
+    if (dataStr == null) continue;
+    final data = jsonDecode(dataStr);
+    switch (event) {
+      case "delta":
+        full += data['text'] as String;
+        updateUI(full);   // 增量更新气泡显示
+        break;
+      case "done":
+        full = data['full'] as String;
+        finalizeUI(full);
+        // 把这轮加进 history 给下次用
+        chatHistory.add(ChatMessage(role: 'user', content: inputText));
+        chatHistory.add(ChatMessage(role: 'assistant', content: full));
+        break;
+      case "error":
+        showError(data['message']);
+        break;
+    }
+  }
+}
+```
+
+### 注意事项
+
+1. **Markdown 渲染**:AI 回复是 Markdown 格式(含 `**加粗**` / `### 标题` / 列表 / 数学公式 `$x=2$` 等),Flutter 建议用 `flutter_markdown` 包渲染。数学公式可叠加 `flutter_math_fork`。
+2. **历史对话上下文**:`history` 由前端自己维护(本地 state),每次调聊天接口都把累积的传过来。**不需要**调单独接口去拿历史(后端不存,只算"长期对话历史"在 user_profiles.ai_history 里,那个是分析用)。
+3. **多轮记忆**:扣子工作流会读 `history`,所以 AI 能记住本会话之前的对话(类似 ChatGPT 同一会话)。但**清空 history = 新对话**。
+4. **流式中断**:如果用户切页/关闭对话,客户端断开请求即可,后端会自动 cleanup。
+5. **图片有效期**:Supabase Storage 存的图永久保留(直到学生注销),扣子那边 file_id 3 个月过期但不影响业务(URL 一直能访问)。
 
 ---
 

@@ -175,11 +175,21 @@ export async function GET(req: Request) {
     });
   }
   if (psy["情绪"] || psy["焦虑等级"]) {
-    const anx = psy["焦虑等级"] ? `状态焦虑 ${psy["焦虑等级"]?.状态焦虑 || "—"} · 学习压力 ${psy["焦虑等级"]?.学习压力 || "—"}` : "";
-    ai_sections.push({
-      title: "心理状态",
-      text: [psy["情绪"], anx].filter(Boolean).join(" · ")
-    });
+    // 焦虑等级.{状态焦虑,学习压力} 实际是 {title,result,status,proposal} 对象, 取 title 当一句话呈现
+    const pick = (k: string): string => {
+      const v = psy["焦虑等级"]?.[k];
+      if (!v) return "";
+      if (typeof v === "string") return v;
+      return String(v.title || v.label || v.level || "");
+    };
+    const parts = [
+      typeof psy["情绪"] === "string" ? psy["情绪"] : "",
+      pick("状态焦虑"),
+      pick("学习压力")
+    ].filter(Boolean);
+    if (parts.length > 0) {
+      ai_sections.push({ title: "心理状态", text: parts.join(" · ") });
+    }
   }
   if (mm?.state_label && mm?.comment) {
     ai_sections.push({ title: "今日状态", text: `${mm.state_label} — ${mm.comment}` });

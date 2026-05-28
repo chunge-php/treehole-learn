@@ -876,7 +876,24 @@ await for (final chunk in resp.stream.transform(utf8.decoder)) {
 
 学生在首页处于 `no_face` 状态时,点「解锁今日学习状态」卡 → 平板调用人脸识别 SDK + 录制 10 秒视频/音频 → 上传到华为云 OBS → 触发多模态评估 → 拿到「动力 / 压力 / 元气」等今日学习状态数据,首页变 `ready` 态。
 
+> ⚠️ **一期开发模式**:第三方多模态识别接口(发展猫)还没给,**App 端一期可以完全跳过文件上传**,直接调 `/finalize` 拿模拟分值即可。平板上的人脸识别录制依然要做(动画/UX),但录完的文件可以**先不上传**,等二期对接发展猫后再启用 `/upload-media` 接口。
+
 ### 整体流程
+
+#### 🚀 一期简化版(当前阶段,推荐)
+
+```
+平板端 (Flutter)
+├ 1. 学生点「解锁」卡, 播放 10s 人脸识别动画 (可走 mock)
+└ 2. 动画播完直接调:
+     POST /api/app/face-check/finalize  body: {} (空)
+     ↓ 后端 generateRandomScores 模拟分
+     ↓ 写 user_profiles.multimodal_latest
+     ↓ 返回 { multimodal, game }
+└ 3. 用响应直接更新首页 state, 进入 ready 状态
+```
+
+#### 🔮 二期完整版(等发展猫接口给了再切)
 
 ```
 平板端 (Flutter)
@@ -886,14 +903,18 @@ await for (final chunk in resp.stream.transform(utf8.decoder)) {
 │    ↓ 返回 url + file_id
 └ 3. 触发评估:
      POST /api/app/face-check/finalize body 带上一步的 url/file_id
-     ↓ 返回 multimodal + game (前端可直接更新首页 state)
+     ↓ 后端调发展猫 API 拿真实 11 项分
+     ↓ 写学生档案
+     ↓ 返回 { multimodal, game }
 
-服务端
-├ 文件存储 — 华为云 OBS, 严格按发展猫文档路径:
-│   data/{XXL+7位}/{audio|video|script}/{timestamp}/{timestamp}{user_id}raw.{ext}
-├ 评分 — 一期本地查表生成 11 项分值 (后续二期接发展猫真接口)
-└ 学生档案 — 静默写 user_profiles.multimodal_latest (跟 AI 聊天一样不推前端)
+服务端二期文件存储:
+   华为云 OBS, 严格按文档路径:
+   data/{XXL+7位}/{audio|video|script}/{timestamp}/{timestamp}{user_id}raw.{ext}
 ```
+
+> 接口签名(URL + 字段)**两期完全一致**,后端切换由 `debug.mode` 标记区分:
+> - 一期 `local_simulation` — body 不传文件 / 不调发展猫 / 本地查表
+> - 二期 `fazhanmao_real` — body 带文件 URL / 后端调发展猫 / 真分
 
 ---
 
@@ -1020,22 +1041,44 @@ Content-Type: application/json
 
 ---
 
-### 完整集成示例(Flutter)
+### 集成示例
+
+#### 🚀 一期(直接调 finalize 拿模拟分,推荐先用这个)
 
 ```dart
-// Step 1: 录制 (平板原生 SDK, 这里假设已经拿到三个 File 对象)
-final audioFile = ...; // wav
-final videoFile = ...; // mp4
+// 学生点「解锁」卡 → 播放 10s 人脸识别动画 (可只是动画, 不真录)
+await playFaceRecognitionAnimation();
+
+// 直接调 finalize, body 空对象
+final finalize = await dio.post('/api/app/face-check/finalize',
+  data: {},
+  options: Options(headers: {'Authorization': 'Bearer $token'}),
+);
+
+// 用响应直接更新首页 state
+setState(() {
+  homeMultimodal = finalize.data['multimodal'];
+  homeGame = finalize.data['game'];
+  homeStatus = 'ready';
+});
+```
+
+#### 🔮 二期(发展猫接口对接后切换)
+
+```dart
+// Step 1: 录制 (平板原生 SDK, 假设拿到三个 File 对象)
+final audioFile = ...; // wav 16kHz
+final videoFile = ...; // mp4 25fps
 final txtFile   = ...; // 可选: ASR 转录文本
 
-// Step 2: 并发上传三个文件
+// Step 2: 并发上传三个文件 (走 OBS)
 final results = await Future.wait([
   _uploadOne(audioFile, 'audio'),
   _uploadOne(videoFile, 'video'),
   if (txtFile != null) _uploadOne(txtFile, 'script'),
 ]);
 
-// Step 3: 触发评估
+// Step 3: 触发评估, 把 URL/file_id 一起带上
 final finalize = await dio.post('/api/app/face-check/finalize',
   data: {
     'audio_url': results[0]['url'],

@@ -78,19 +78,17 @@ function sample13(arr: number[]): number[] {
 const CLOUD_COLORS = ["#1490ff", "#ff6a00", "#3CA272", "#73C0DE", "#FAC858", "#EE6666"];
 
 /**
- * 关键词云 — 居中向外的随机旋转扩散
- *   - 第 0 个最重要的词在画布正中, 字号最大
- *   - 后续基础角度 = i × 60° 形成肉眼可见的旋转, 再叠加 ± 50° hash 抖动避免规整
- *   - 半径随 i 递增, 再 ± 30% hash 抖动避免同心环
- *   - 字号 60 → 22 渐变
- *   - 同词永远落同位置 (hash 稳定), 越界裁剪到画布内
+ * 关键词云 — 居中向外随机扩散 (稍宽间距)
+ *   - 第 0 个最重要的词在画布正中, 字号 60
+ *   - 后续按词文本 hash 决定方向 (0~2π 随机), 半径随 i 递增 + 抖动
+ *   - 字号 60 → 22, 越外圈字越小
+ *   - rotate 角度也按 hash 抽: 多数水平小角度, 少量竖排
+ *   - 同词永远落同位置同角度
  * 画布按前端 .cloud-zone 100% × 440rpx 推算约 480 × 400
  */
 function layoutCloudWords(words: string[]): Array<{ text: string; size: number; color: string; x: number; y: number; rotate: number }> {
   const CW = 480, CH = 400;
   const CX = CW / 2, CY = CH / 2;
-  const ANGLE_STEP = (60 * Math.PI) / 180;  // 每个词转 60°, 6 个词转一圈, 旋转感明显
-  const ANGLE_JITTER = (50 * Math.PI) / 180; // ± 50° 抖动避免太规整
   const hash01 = (s: string, salt = 0) => {
     let h = 2166136261 ^ salt;
     for (let i = 0; i < s.length; i++) {
@@ -99,6 +97,7 @@ function layoutCloudWords(words: string[]): Array<{ text: string; size: number; 
     }
     return ((h >>> 0) % 10000) / 10000;
   };
+  const ROTATE_POOL = [0, 0, 0, 0, 15, -15, 30, -30, 45, -45, 90, -90];
   return words.map((text, i) => {
     const size = Math.max(22, 60 - i * 4);
     const approxW = text.length * size * 0.95;
@@ -106,16 +105,14 @@ function layoutCloudWords(words: string[]): Array<{ text: string; size: number; 
     if (i === 0) {
       cx = CX; cy = CY;
     } else {
-      const angle = i * ANGLE_STEP + (hash01(text, 17) - 0.5) * 2 * ANGLE_JITTER;
-      const baseRadius = 30 + i * 14;
-      const radius = baseRadius * (0.7 + hash01(text, 31) * 0.6);
+      const angle = hash01(text, 17) * Math.PI * 2;
+      const baseRadius = 50 + i * 22;                      // 基础半径 + 间距 (越大越松)
+      const radius = baseRadius * (0.85 + hash01(text, 31) * 0.3); // ± 15% 抖动
       cx = CX + radius * Math.cos(angle);
       cy = CY + radius * Math.sin(angle);
     }
     const x = Math.max(8, Math.min(CW - approxW - 8, cx - approxW / 2));
     const y = Math.max(8, Math.min(CH - size - 8, cy - size / 2));
-    // 旋转: 中心词水平 (0°), 其他词从一组角度池里按 hash 抽 — 大部分水平/小角度, 少量大角度增加灵动
-    const ROTATE_POOL = [0, 0, 0, 0, 15, -15, 30, -30, 45, -45, 90, -90];
     const rotate = i === 0 ? 0 : ROTATE_POOL[Math.floor(hash01(text, 53) * ROTATE_POOL.length)];
     return {
       text,

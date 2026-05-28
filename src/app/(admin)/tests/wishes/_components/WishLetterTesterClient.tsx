@@ -12,16 +12,18 @@ import { previewLetterContext, runLetterGeneration, saveWishLetter, listWishItem
 import { Wand2, FileText, Save, Loader2, Mail, Eye, Plus, Trash2, ListTodo } from "lucide-react";
 import { toast } from "sonner";
 
+type TemplateMeta = { id: string; code: string; name: string; system_role: string; prefix_template: string; rules: string } | null;
+
 export function WishLetterTesterClient({
-  students, defaultYear, defaultMonth
-}: { students: StudentOpt[]; defaultYear: number; defaultMonth: number }) {
+  students, defaultYear, defaultMonth, defaultTemplate
+}: { students: StudentOpt[]; defaultYear: number; defaultMonth: number; defaultTemplate: TemplateMeta }) {
   const [studentId, setStudentId] = useState("");
   const [year, setYear] = useState(defaultYear);
   const [month, setMonth] = useState(defaultMonth);
   const [content, setContent] = useState("");
   const [meta, setMeta] = useState<{ mock?: boolean; debugUrl?: string; studentName?: string }>({});
   const [rendered, setRendered] = useState("");
-  const [tplMeta, setTplMeta] = useState<{ name?: string; system_role?: string; rules?: string }>({});
+  const [tplMeta, setTplMeta] = useState<{ name?: string; system_role?: string; rules?: string; prefix_template?: string }>(defaultTemplate || {});
 
   const [items, setItems] = useState<Array<{ id: string; content: string; createdAt: string }>>([]);
   const [newWish, setNewWish] = useState("");
@@ -73,7 +75,7 @@ export function WishLetterTesterClient({
       try {
         const p = await previewLetterContext({ endUserId: studentId, year, month });
         setRendered(p.rendered);
-        setTplMeta({ name: p.template.name, system_role: p.template.system_role, rules: p.template.rules });
+        setTplMeta({ name: p.template.name, system_role: p.template.system_role, rules: p.template.rules, prefix_template: p.template.prefix_template });
         toast.success("已渲染档案上下文 (未调扣子)");
       } catch (e: any) { toast.error(e?.message || "渲染失败"); }
     });
@@ -284,16 +286,23 @@ export function WishLetterTesterClient({
 
         <TabsContent value="template">
           <Card className="p-4 space-y-3">
-            {tplMeta.name && <div className="text-sm font-medium">{tplMeta.name}</div>}
-            <div>
-              <Label className="text-xs">system_role</Label>
-              <pre className="text-xs bg-muted/50 p-3 rounded-md whitespace-pre-wrap mt-1">{tplMeta.system_role || "—"}</pre>
+            <div className="flex items-center justify-between">
+              {tplMeta.name && <div className="text-sm font-medium">{tplMeta.name}</div>}
+              <a href="/tests/prompt-templates" className="text-xs text-blue-600 underline">去编辑 →</a>
             </div>
             <div>
-              <Label className="text-xs">rules</Label>
-              <pre className="text-xs bg-muted/50 p-3 rounded-md whitespace-pre-wrap mt-1">{tplMeta.rules || "—"}</pre>
+              <Label className="text-xs">system_role (扣子 System Prompt 的第一段)</Label>
+              <pre className="text-xs bg-muted/50 p-3 rounded-md whitespace-pre-wrap mt-1 max-h-64 overflow-auto">{tplMeta.system_role || "(空 — migration 32 / seed 还没跑过?)"}</pre>
             </div>
-            <p className="text-xs text-muted-foreground">改提示词请去 <a href="/tests/prompt-templates" className="underline">提示词模板</a>, code = <code>monthly_wish_letter</code></p>
+            <div>
+              <Label className="text-xs">prefix_template (档案占位符模板, 渲染后塞给扣子的 student_context)</Label>
+              <pre className="text-xs bg-muted/50 p-3 rounded-md whitespace-pre-wrap mt-1 max-h-64 overflow-auto">{tplMeta.prefix_template || "—"}</pre>
+            </div>
+            <div>
+              <Label className="text-xs">rules (扣子 System Prompt 的第二段)</Label>
+              <pre className="text-xs bg-muted/50 p-3 rounded-md whitespace-pre-wrap mt-1 max-h-64 overflow-auto">{tplMeta.rules || "—"}</pre>
+            </div>
+            <p className="text-xs text-muted-foreground">code = <code>monthly_wish_letter</code></p>
           </Card>
         </TabsContent>
       </Tabs>

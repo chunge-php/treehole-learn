@@ -1,11 +1,14 @@
-import { listStudentsForLetter } from "./actions";
+import { listStudentsForLetter, getLetterTemplateMeta } from "./actions";
 import { WishLetterTesterClient } from "./_components/WishLetterTesterClient";
 import { PageHeader } from "@/components/admin/PageHeader";
 import { requireAdmin } from "@/lib/auth";
 
 export default async function WishLetterTestPage() {
   requireAdmin();
-  const students = await listStudentsForLetter();
+  const [students, template] = await Promise.all([
+    listStudentsForLetter(),
+    getLetterTemplateMeta().catch(() => null)
+  ]);
   const now = new Date();
   return (
     <div>
@@ -17,6 +20,7 @@ export default async function WishLetterTestPage() {
         students={students}
         defaultYear={now.getFullYear()}
         defaultMonth={now.getMonth() + 1}
+        defaultTemplate={template}
       />
     </div>
   );

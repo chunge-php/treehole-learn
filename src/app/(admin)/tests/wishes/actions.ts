@@ -83,9 +83,23 @@ export async function previewLetterContext(input: { endUserId: string; year: num
   const tpl = await loadLetterTemplate();
   const ctx = await buildLetterContext({ ...input, template: tpl });
   return {
-    template: { id: tpl.id, code: tpl.code, name: tpl.name, system_role: tpl.system_role, rules: tpl.rules },
+    template: { id: tpl.id, code: tpl.code, name: tpl.name, system_role: tpl.system_role, rules: tpl.rules, prefix_template: tpl.prefix_template },
     rendered: ctx.rendered,
     placeholders: ctx.placeholders
+  };
+}
+
+/** 仅拉提示词模板 (不需要学生 id), 用于测试页初次加载就显示 */
+export async function getLetterTemplateMeta() {
+  requireAdmin();
+  const tpl = await loadLetterTemplate();
+  return {
+    id: tpl.id,
+    code: tpl.code,
+    name: tpl.name,
+    system_role: tpl.system_role,
+    rules: tpl.rules,
+    prefix_template: tpl.prefix_template
   };
 }
 

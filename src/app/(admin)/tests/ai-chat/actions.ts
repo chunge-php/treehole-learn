@@ -34,6 +34,7 @@ export async function bootstrapChat(): Promise<ChatBootstrap> {
     sb.from("prompt_templates")
       .select("id, code, name, system_role, prefix_template, rules")
       .eq("is_active", true)
+      .neq("code", "profile_extract")   // 聊天页不让选档案分析模板 (那是后台 B 工作流专用, 会让 AI 输出 JSON)
       .order("updated_at", { ascending: false })
   ]);
   return {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { getMpAuth } from "@/lib/mp-session";
+import { parseTime } from "../route";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,7 @@ const NAME_MAX = 30;
 
 /**
  * 修改作业 (仅家长添加的、且属于自己绑定孩子的)
- * POST { id, name, startDate, endDate }
+ * POST { id, name, startDate, endDate, startTime?, endTime? }
  */
 export async function POST(req: Request) {
   const auth = getMpAuth(req);
@@ -35,9 +36,12 @@ export async function POST(req: Request) {
       .maybeSingle();
     if (!bound) return NextResponse.json({ ok: false, error: "无权操作" }, { status: 403 });
 
-    const patch: Record<string, string> = { name };
+    const patch: Record<string, string | null> = { name };
     if (body?.startDate) patch.start_date = String(body.startDate).slice(0, 10);
     if (body?.endDate) patch.end_date = String(body.endDate).slice(0, 10);
+    // startTime/endTime 显式传 (含 null) 才更新, 没传 → 不动原值
+    if (body?.startTime !== undefined) patch.start_time = parseTime(body.startTime);
+    if (body?.endTime !== undefined) patch.end_time = parseTime(body.endTime);
 
     const { error } = await sb.from("assignments").update(patch).eq("id", id);
     if (error) throw new Error(error.message);

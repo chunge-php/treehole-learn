@@ -12,10 +12,26 @@ function sourceText(s: string) {
   return s === "parent" ? "家长添加" : "后台添加";
 }
 
+/** PG time 列回 "HH:MM:SS"; 裁成 "HH:MM" 给前端 */
+function trimTime(t: string | null): string | null {
+  if (!t) return null;
+  const m = /^(\d{2}):(\d{2})/.exec(String(t));
+  return m ? `${m[1]}:${m[2]}` : null;
+}
+
+/** 前端送 "HH:MM" 或 "HH:MM:SS"; 非法/空 -> null */
+export function parseTime(v: any): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  const m = /^(\d{2}):(\d{2})(?::\d{2})?$/.exec(s);
+  return m ? `${m[1]}:${m[2]}:00` : null;
+}
+
 /**
  * 作业列表 (当前孩子)
  * GET /api/mp/homework[?endUserId=]
- * 出参: { ok, student:{id,name}|null, list:[{id,title,from,done,startDate,endDate}] }
+ * 出参: { ok, student:{id,name}|null, list:[{id,title,from,done,startDate,endDate,startTime,endTime}] }
  */
 export async function GET(req: Request) {
   const auth = getMpAuth(req);
@@ -28,7 +44,7 @@ export async function GET(req: Request) {
     const sb = adminSupabase();
     const { data, error } = await sb
       .from("assignments")
-      .select("id, name, start_date, end_date, completed_at, source")
+      .select("id, name, start_date, end_date, start_time, end_time, completed_at, source")
       .eq("end_user_id", child.id)
       .order("start_date", { ascending: false })
       .limit(200);
@@ -41,7 +57,9 @@ export async function GET(req: Request) {
       source: a.source,
       done: !!a.completed_at,
       startDate: a.start_date,
-      endDate: a.end_date
+      endDate: a.end_date,
+      startTime: trimTime(a.start_time),
+      endTime: trimTime(a.end_time)
     }));
     return NextResponse.json({ ok: true, student: { id: child.id, name: child.name }, list });
   } catch (e: any) {
@@ -51,7 +69,8 @@ export async function GET(req: Request) {
 
 /**
  * 家长端添加作业 (一次可多条)
- * POST { items:[名称], startDate, endDate, endUserId? }  source 固定 parent
+ * POST { items:[名称], startDate, endDate, startTime?, endTime?, endUserId? }
+ * source 固定 parent; startTime/endTime 为 "HH:MM", 可空
  */
 export async function POST(req: Request) {
   const auth = getMpAuth(req);
@@ -70,6 +89,8 @@ export async function POST(req: Request) {
     const today = new Date().toISOString().slice(0, 10);
     const startDate = String(body?.startDate || today).slice(0, 10);
     const endDate = String(body?.endDate || startDate).slice(0, 10);
+    const startTime = parseTime(body?.startTime);
+    const endTime = parseTime(body?.endTime);
 
     const rows = names.map((name) => ({
       id: shortId("at"),
@@ -79,6 +100,8 @@ export async function POST(req: Request) {
       name,
       start_date: startDate,
       end_date: endDate,
+      start_time: startTime,
+      end_time: endTime,
       source: "parent"
     }));
     const sb = adminSupabase();

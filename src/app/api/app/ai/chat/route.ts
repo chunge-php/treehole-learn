@@ -20,9 +20,9 @@
 import { NextRequest } from "next/server";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { requireAppAuth } from "@/lib/app-session";
-import { streamWorkflow, runWorkflow, uploadFileToCoze, extractWorkflowText, isEmptyReply } from "@/lib/coze/client";
-import { renderPrompt, updateProfileFromChat, mergeProfileUpdate } from "@/lib/profile/sync";
-import { runWishExtract } from "@/lib/profile/wish-extract";
+import { streamWorkflow, uploadFileToCoze, extractWorkflowText, isEmptyReply } from "@/lib/coze/client";
+import { renderPrompt, updateProfileFromChat } from "@/lib/profile/sync";
+import { runProfileExtractDetailed } from "@/lib/profile/extract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -143,7 +143,8 @@ export async function POST(req: NextRequest) {
             // 主对话 done 立刻关流, 学生看完回复就能继续聊
             send("done", { full });
 
-            // 后台静默同步学生档案 (不推 profile_updated 给学生端)
+            // 后台静默同步学生档案 + 心愿 (学生端不推任何系统提示)
+            // runProfileExtractDetailed 内部已把工作流附带的 wishes 拆出写 student_wish_items
             if (full) {
               (async () => {
                 try {
@@ -153,37 +154,11 @@ export async function POST(req: NextRequest) {
                     assistant_message: full,
                     by: null
                   });
-                  // 异步抽取档案更新, 失败不影响
-                  const sb = adminSupabase();
-                  const { data: extractTpl } = await sb.from("prompt_templates")
-                    .select("system_role").eq("code", "profile_extract").eq("is_active", true).maybeSingle();
-                  const extractWorkflow = process.env.COZE_WORKFLOW_PROFILE_EXTRACT || "";
-                  if (extractTpl?.system_role && extractWorkflow) {
-                    const res = await runWorkflow({
-                      workflowId: extractWorkflow,
-                      parameters: {
-                        system_prompt: extractTpl.system_role,
-                        student_name: studentName,
-                        user_message: userMessage,
-                        assistant_message: full
-                      }
-                    });
-                    let raw: any = res.data;
-                    if (raw && typeof raw === "object" && "output" in raw) raw = (raw as any).output;
-                    if (typeof raw === "string") {
-                      const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-                      try {
-                        const parsed = JSON.parse(cleaned);
-                        await mergeProfileUpdate({ end_user_id: studentId, update: parsed, by: null });
-                      } catch { /* JSON 解析失败静默跳过 */ }
-                    }
-                  }
-                  // 心愿识别 — 静默写入 student_wish_items (学生端不推任何系统提示, 月底打包进家长信)
-                  await runWishExtract({
+                  await runProfileExtractDetailed({
                     endUserId: studentId,
                     userMessage,
                     assistantMessage: full,
-                    studentName
+                    by: null
                   });
                 } catch (e: any) {
                   console.error("[app/ai-chat] 后台档案同步失败:", e?.message || e);

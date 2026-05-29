@@ -13,7 +13,6 @@ import { streamWorkflow, runWorkflow, uploadFileToCoze, extractWorkflowText, isE
 import { buildSystemPrompt } from "@/app/(admin)/tests/ai-chat/actions";
 import { updateProfileFromChat } from "@/lib/profile/sync";
 import { runProfileExtractDetailed } from "@/lib/profile/extract";
-import { runWishExtract } from "@/lib/profile/wish-extract";
 import { adminSupabase } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -125,16 +124,13 @@ export async function POST(req: NextRequest) {
                     assistant_message: full,
                     by: adminId
                   });
-                  // 档案抽取 + 心愿识别并行 (互不依赖, 各自走自己的工作流/表)
-                  const [profileRes, wishRes] = await Promise.all([
-                    runProfileExtractDetailed({ endUserId, userMessage, assistantMessage: full, by: adminId }),
-                    runWishExtract({ endUserId, userMessage, assistantMessage: full, studentName })
-                  ]);
+                  // 档案抽取 (内部已把工作流附带的 wishes 拆出写库, 心愿合进这一条调用)
+                  const profileRes = await runProfileExtractDetailed({ endUserId, userMessage, assistantMessage: full, by: adminId });
                   // 测试中心: 每轮总是回报后台同步状态 (跑没跑/改了啥/为啥空), 不再静默
                   try {
                     send("sync_status", {
                       profile: { changed: profileRes.changed, note: profileRes.note },
-                      wishes:  { marked: wishRes.marked, note: wishRes.note }
+                      wishes:  { marked: profileRes.wish.marked, note: profileRes.wish.note }
                     });
                   } catch { /* 前端可能已断开, 静默 */ }
                 } catch (e: any) {

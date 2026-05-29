@@ -57,11 +57,19 @@ export async function runProfileExtractDetailed(args: {
 
   // 心愿合并方案: 工作流在档案 JSON 里附带 wishes 数组 → 拆出来写 student_wish_items,
   // 并从 parsed 里剔除 wishes 再合并档案 (避免污染 user_profiles)
+  const hasWishKey = !!parsed && typeof parsed === "object" && !Array.isArray(parsed)
+    && (Array.isArray((parsed as any).wishes) || Array.isArray((parsed as any).心愿));
   const wishList = parseWishes(parsed);
   if (parsed && typeof parsed === "object") { delete (parsed as any).wishes; delete (parsed as any).心愿; }
   let wish: WishExtractResult;
   try {
-    wish = await persistWishes({ endUserId: args.endUserId, wishes: wishList, sourceMessage: args.userMessage });
+    if (!hasWishKey) {
+      // 工作流返回了 JSON 但根本没有 wishes 键 → 扣子工作流提示词还没加心愿输出 (见 migration 37)
+      const keys = parsed && typeof parsed === "object" ? Object.keys(parsed).join("/") : "";
+      wish = { marked: [], note: `工作流未输出 wishes 键 (现有 key: ${keys || "空"}) → 需在扣子工作流提示词加心愿输出段` };
+    } else {
+      wish = await persistWishes({ endUserId: args.endUserId, wishes: wishList, sourceMessage: args.userMessage });
+    }
   } catch (e: any) {
     wish = { marked: [], note: `心愿写库异常: ${e?.message || e}` };
   }

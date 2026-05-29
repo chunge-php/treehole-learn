@@ -8,8 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { previewLetterContext, runLetterGeneration, saveWishLetter, listWishItems, addTestWishItem, deleteWishItem, type StudentOpt } from "../actions";
-import { Wand2, FileText, Save, Loader2, Mail, Eye, Plus, Trash2, ListTodo } from "lucide-react";
+import { previewLetterContext, runLetterGeneration, saveWishLetter, listWishItems, addTestWishItem, deleteWishItem, listSavedLetters, deleteSavedLetter, type StudentOpt } from "../actions";
+import { Wand2, FileText, Save, Loader2, Mail, Eye, Plus, Trash2, ListTodo, Inbox } from "lucide-react";
 import { toast } from "sonner";
 
 type TemplateMeta = { id: string; code: string; name: string; system_role: string; prefix_template: string; rules: string } | null;
@@ -27,12 +27,15 @@ export function WishLetterTesterClient({
 
   const [items, setItems] = useState<Array<{ id: string; content: string; createdAt: string; source?: string; category?: string | null }>>([]);
   const [newWish, setNewWish] = useState("");
+  const [letters, setLetters] = useState<Array<{ id: string; title: string; content: string; year: number; month: number; createdAt: string }>>([]);
 
   const [previewing, startPreview] = useTransition();
   const [running, startRun] = useTransition();
   const [saving, startSave] = useTransition();
   const [loadingItems, startLoadItems] = useTransition();
   const [adding, startAdd] = useTransition();
+  const [loadingLetters, startLoadLetters] = useTransition();
+  const [deletingLetter, startDeleteLetter] = useTransition();
 
   function refreshItems() {
     if (!studentId) { setItems([]); return; }
@@ -66,8 +69,30 @@ export function WishLetterTesterClient({
     });
   }
 
+  function refreshLetters() {
+    if (!studentId) { setLetters([]); return; }
+    startLoadLetters(async () => {
+      try {
+        const list = await listSavedLetters({ endUserId: studentId });
+        setLetters(list);
+      } catch (e: any) { toast.error(e?.message || "拉信件列表失败"); }
+    });
+  }
+
+  function removeLetter(id: string) {
+    startDeleteLetter(async () => {
+      try {
+        await deleteSavedLetter({ id });
+        refreshLetters();
+        toast.success("已删除该信件");
+      } catch (e: any) { toast.error(e?.message || "删除失败"); }
+    });
+  }
+
   // 学生/年/月 变化时自动刷新心愿条目
   useEffect(() => { refreshItems(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [studentId, year, month]);
+  // 学生变化时刷新已生成信件列表 (信件不分月, 跟年月无关)
+  useEffect(() => { refreshLetters(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [studentId]);
 
   function preview() {
     if (!studentId) { toast.error("请先选择学生"); return; }
@@ -148,6 +173,7 @@ export function WishLetterTesterClient({
         const r = await saveWishLetter({ endUserId: studentId, year, month, content: content.trim() });
         const stamp = `${year}年${String(month).padStart(2, "0")}月`;
         toast.success(`已写入信件库 (${meta.studentName || "该学生"} · ${stamp})`);
+        refreshLetters();
         const fields = r.profileChangedFields || [];
         if (fields.length > 0) {
           toast.success(`档案已回写 ${fields.length} 项: ${fields.slice(0, 4).join(", ")}${fields.length > 4 ? " ..." : ""}`);
@@ -251,6 +277,38 @@ export function WishLetterTesterClient({
           <div className="text-xs text-muted-foreground text-center py-4 italic">
             该学生本月还没有心愿. 去「AI 聊天」页跟学生聊几句, AI 会自动识别心愿; 或在这里手动补一条
           </div>
+        ) : (
+          <div className="text-xs text-muted-foreground text-center py-4 italic">先选学生</div>
+        )}
+      </Card>
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Inbox className="h-4 w-4" />
+            已生成的信件 (信件库)
+            <Badge variant="secondary">{letters.length} 封</Badge>
+            {loadingLetters && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+          </div>
+          <span className="text-xs text-muted-foreground">测试时删掉重生成方便</span>
+        </div>
+
+        {letters.length > 0 ? (
+          <div className="space-y-2">
+            {letters.map((l) => (
+              <div key={l.id} className="flex items-start gap-2 text-sm bg-muted/40 rounded px-3 py-2">
+                <Badge variant="outline" className="text-[10px] shrink-0 mt-0.5">{l.year}年{String(l.month).padStart(2, "0")}月</Badge>
+                <span className="flex-1 text-xs text-muted-foreground line-clamp-2 leading-relaxed">{l.content}</span>
+                <span className="text-[10px] text-muted-foreground shrink-0 mt-0.5">{new Date(l.createdAt).toLocaleString()}</span>
+                <Button size="sm" variant="ghost" onClick={() => removeLetter(l.id)} disabled={deletingLetter}
+                  className="h-6 w-6 p-0 text-destructive hover:text-destructive shrink-0">
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : studentId ? (
+          <div className="text-xs text-muted-foreground text-center py-4 italic">该学生还没有已保存的信件</div>
         ) : (
           <div className="text-xs text-muted-foreground text-center py-4 italic">先选学生</div>
         )}

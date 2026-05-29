@@ -156,3 +156,28 @@ export async function saveWishLetter(input: {
   }
   return { ok: true, id: row.id, profileChangedFields: changedFields };
 }
+
+/** 已生成的信件列表 (某学生, 倒序最近 30 封) — 测试时方便查看/删除重测 */
+export async function listSavedLetters(input: { endUserId: string }) {
+  requireAdmin();
+  const sb = adminSupabase();
+  const { data, error } = await sb.from("student_wishes")
+    .select("id, title, content, year, month, created_at")
+    .eq("end_user_id", input.endUserId)
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (error) throw new Error(error.message);
+  return (data || []).map((w: any) => ({
+    id: w.id, title: w.title, content: w.content,
+    year: w.year, month: w.month, createdAt: w.created_at
+  }));
+}
+
+/** 删除一封已生成的信件 (测试用) */
+export async function deleteSavedLetter(input: { id: string }) {
+  requireAdmin();
+  const sb = adminSupabase();
+  const { error } = await sb.from("student_wishes").delete().eq("id", input.id);
+  if (error) throw new Error(error.message);
+  return { ok: true };
+}

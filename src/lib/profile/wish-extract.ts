@@ -18,6 +18,7 @@ const CONTENT_MAX = 60;
 const DEDUP_RECENT = 50;
 
 export type MarkedWish = { content: string; category: string };
+export type WishExtractResult = { marked: MarkedWish[]; note: string };
 
 function normalize(s: string): string {
   return s.replace(/\s+/g, "").replace(/[。.,，、!！?？~～]+$/g, "").toLowerCase();
@@ -32,19 +33,19 @@ export async function runWishExtract(args: {
   userMessage: string;
   assistantMessage: string;
   studentName?: string;
-}): Promise<MarkedWish[]> {
+}): Promise<WishExtractResult> {
   const userMessage = (args.userMessage || "").trim();
-  if (!userMessage) return [];   // 纯看图/空发言, 没学生原话可识别
+  if (!userMessage) return { marked: [], note: "本轮无学生文字 (纯看图)" };
 
-  const workflowId = process.env.COZE_WORKFLOW_WISH_EXTRACT
-    || process.env.COZE_WORKFLOW_PROFILE_EXTRACT
-    || "";
-  if (!workflowId) return [];
+  const wishEnv = process.env.COZE_WORKFLOW_WISH_EXTRACT || "";
+  const profEnv = process.env.COZE_WORKFLOW_PROFILE_EXTRACT || "";
+  const workflowId = wishEnv || profEnv || "";
+  if (!workflowId) return { marked: [], note: "未配置扣子工作流 (COZE_WORKFLOW_WISH_EXTRACT / PROFILE_EXTRACT)" };
 
   const sb = adminSupabase();
   const { data: tpl } = await sb.from("prompt_templates")
     .select("system_role").eq("code", "wish_extract").eq("is_active", true).maybeSingle();
-  if (!tpl?.system_role) return [];
+  if (!tpl?.system_role) return { marked: [], note: "缺 wish_extract 提示词模板 (migration 35 未跑?)" };
 
   // 解析扣子输出
   let wishes: MarkedWish[] = [];
@@ -68,6 +69,10 @@ export async function runWishExtract(args: {
       parsed = raw;
     }
     const arr = Array.isArray(parsed?.wishes) ? parsed.wishes : (Array.isArray(parsed) ? parsed : []);
+    // 工作流返回了 JSON 但既不是 wishes 数组也不是数组 → 输出格式不对 (八成复用的 profile 工作流写死了格式)
+    if (parsed && !Array.isArray(parsed?.wishes) && !Array.isArray(parsed)) {
+      return { marked: [], note: `工作流输出无 wishes 键 (返回 key: ${Object.keys(parsed).join("/") || "空"}) → 需单独建 wish_extract 工作流` };
+    }
     wishes = arr
       .map((w: any) => ({
         content: String(w?.content ?? w?.心愿 ?? "").trim().slice(0, CONTENT_MAX),
@@ -76,9 +81,9 @@ export async function runWishExtract(args: {
       .filter((w: MarkedWish) => w.content.length > 0);
   } catch (e: any) {
     console.error("[wish-extract] workflow call failed:", e?.message || e);
-    return [];
+    return { marked: [], note: `扣子调用报错: ${e?.message || e}` };
   }
-  if (wishes.length === 0) return [];
+  if (wishes.length === 0) return { marked: [], note: "本轮未识别到心愿" };
 
   // 去重: 同一轮内 + 最近已存在条目
   const seen = new Set<string>();
@@ -96,7 +101,7 @@ export async function runWishExtract(args: {
     .limit(DEDUP_RECENT);
   const existing = new Set((recent || []).map((r: any) => normalize(String(r.content || ""))));
   const fresh = wishes.filter(w => !existing.has(normalize(w.content)));
-  if (fresh.length === 0) return [];
+  if (fresh.length === 0) return { marked: [], note: `识别到 ${wishes.length} 个但都跟最近已有心愿重复, 已跳过` };
 
   // 取学生归属链做隔离字段
   const { data: stu } = await sb.from("end_users")
@@ -115,9 +120,9 @@ export async function runWishExtract(args: {
   const { error } = await sb.from("student_wish_items").insert(rows);
   if (error) {
     console.error("[wish-extract] insert failed:", error.message);
-    return [];
+    return { marked: [], note: `写库失败: ${error.message}` };
   }
-  return fresh;
+  return { marked: fresh, note: `已记录 ${fresh.length} 个心愿` };
 }
 
 /**

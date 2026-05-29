@@ -12,7 +12,7 @@ import { requireAdmin } from "@/lib/auth";
 import { streamWorkflow, runWorkflow, uploadFileToCoze, extractWorkflowText, isEmptyReply } from "@/lib/coze/client";
 import { buildSystemPrompt } from "@/app/(admin)/tests/ai-chat/actions";
 import { updateProfileFromChat } from "@/lib/profile/sync";
-import { runProfileExtract } from "@/lib/profile/extract";
+import { runProfileExtractDetailed } from "@/lib/profile/extract";
 import { runWishExtract } from "@/lib/profile/wish-extract";
 import { adminSupabase } from "@/lib/supabase/admin";
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
             // 立刻推 done → 前端解禁输入框, 用户可继续发言
             send("done", { full });
 
-            // 档案写入异步后台跑, 完成后再推 profile_updated 然后关流。
+            // 档案+心愿异步后台跑, 完成后推 sync_status 状态然后关流。
             // queue.ts 已经保证同学生写入串行, 不必担心数据竞争。
             if (full) {
               (async () => {
@@ -126,20 +126,20 @@ export async function POST(req: NextRequest) {
                     by: adminId
                   });
                   // 档案抽取 + 心愿识别并行 (互不依赖, 各自走自己的工作流/表)
-                  const [changedFields, markedWishes] = await Promise.all([
-                    runProfileExtract({ endUserId, userMessage, assistantMessage: full, by: adminId }),
+                  const [profileRes, wishRes] = await Promise.all([
+                    runProfileExtractDetailed({ endUserId, userMessage, assistantMessage: full, by: adminId }),
                     runWishExtract({ endUserId, userMessage, assistantMessage: full, studentName })
                   ]);
-                  if (changedFields.length > 0) {
-                    try { send("profile_updated", { fields: changedFields }); }
-                    catch { /* 前端可能已断开, 静默 */ }
-                  }
-                  if (markedWishes.length > 0) {
-                    try { send("wishes_marked", { wishes: markedWishes }); }
-                    catch { /* 前端可能已断开, 静默 */ }
-                  }
+                  // 测试中心: 每轮总是回报后台同步状态 (跑没跑/改了啥/为啥空), 不再静默
+                  try {
+                    send("sync_status", {
+                      profile: { changed: profileRes.changed, note: profileRes.note },
+                      wishes:  { marked: wishRes.marked, note: wishRes.note }
+                    });
+                  } catch { /* 前端可能已断开, 静默 */ }
                 } catch (e: any) {
                   console.error("[ai-chat] post-stream sync error:", e?.message || e);
+                  try { send("sync_status", { error: e?.message || String(e) }); } catch {}
                 } finally {
                   try { controller.close(); } catch { /* 已关 */ }
                 }

@@ -13,7 +13,7 @@ import { MarkdownView } from "@/components/admin/MarkdownView";
 import { uploadFile } from "@/lib/upload";
 import { toast } from "sonner";
 
-type Msg = { role: "user" | "assistant"; content: string; streaming?: boolean; profileUpdated?: string[]; wishesMarked?: { content: string; category?: string }[]; imageUrl?: string };
+type Msg = { role: "user" | "assistant"; content: string; streaming?: boolean; profileUpdated?: string[]; wishesMarked?: { content: string; category?: string }[]; syncStatus?: { profileNote?: string; wishNote?: string; error?: string }; imageUrl?: string };
 
 export function AiChatClient({ data }: { data: ChatBootstrap }) {
   const [studentId, setStudentId] = useState("");
@@ -119,7 +119,7 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
         const txt = await resp.text().catch(() => "");
         throw new Error(`接口错误 [${resp.status}]: ${txt.slice(0, 200)}`);
       }
-      // 不 await: 让 readSse 在后台继续接 profile_updated, 不阻塞 send() 返回
+      // 不 await: 让 readSse 在后台继续接 sync_status, 不阻塞 send() 返回
       readSse(resp.body, (event, data) => {
         if (event === "delta" && data?.text != null) {
           setMessages(prev => {
@@ -137,27 +137,35 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
             return copy;
           });
           setSending(false);   // 立刻解禁输入框
-        } else if (event === "profile_updated") {
-          const fields: string[] = Array.isArray(data?.fields) ? data.fields : [];
-          if (fields.length > 0) {
+        } else if (event === "sync_status") {
+          // 测试中心: 后台同步每轮都回报 (跑没跑/改了啥/为啥空), 友好展示
+          if (data?.error) {
+            toast.error(`⚠️ 后台同步失败: ${data.error}`);
             setMessages(prev => {
               if (!prev[assistantIdx] || prev[assistantIdx].role !== "assistant") return prev;
               const copy = [...prev];
-              copy[assistantIdx] = { ...copy[assistantIdx], profileUpdated: fields };
+              copy[assistantIdx] = { ...copy[assistantIdx], syncStatus: { error: data.error } };
               return copy;
             });
-            toast.success(`📋 档案已更新: ${fields.slice(0, 3).join(", ")}${fields.length > 3 ? ` 等 ${fields.length} 项` : ""}`);
-          }
-        } else if (event === "wishes_marked") {
-          const wishes: { content: string; category?: string }[] = Array.isArray(data?.wishes) ? data.wishes : [];
-          if (wishes.length > 0) {
+          } else {
+            const pFields: string[] = Array.isArray(data?.profile?.changed) ? data.profile.changed : [];
+            const pNote: string = data?.profile?.note || "";
+            const wMarked: { content: string; category?: string }[] = Array.isArray(data?.wishes?.marked) ? data.wishes.marked : [];
+            const wNote: string = data?.wishes?.note || "";
             setMessages(prev => {
               if (!prev[assistantIdx] || prev[assistantIdx].role !== "assistant") return prev;
               const copy = [...prev];
-              copy[assistantIdx] = { ...copy[assistantIdx], wishesMarked: wishes };
+              copy[assistantIdx] = { ...copy[assistantIdx],
+                profileUpdated: pFields, wishesMarked: wMarked,
+                syncStatus: { profileNote: pNote, wishNote: wNote } };
               return copy;
             });
-            toast.success(`🌟 记录了 ${wishes.length} 个心愿: ${wishes.map(w => w.content).slice(0, 2).join("、")}${wishes.length > 2 ? " 等" : ""}`);
+            // 档案: 有变更弹成功, 无变更弹普通
+            if (pFields.length > 0) toast.success(`📋 档案更新 ${pFields.length} 项: ${pFields.slice(0, 3).join(", ")}${pFields.length > 3 ? " 等" : ""}`);
+            else toast(`📋 档案: ${pNote || "无变更"}`);
+            // 心愿: 有记录弹成功, 没有则把原因说清楚
+            if (wMarked.length > 0) toast.success(`🌟 记录 ${wMarked.length} 个心愿: ${wMarked.map(w => w.content).slice(0, 2).join("、")}${wMarked.length > 2 ? " 等" : ""}`);
+            else toast(`🌟 心愿: ${wNote || "本轮无"}`);
           }
         } else if (event === "error") {
           setMessages(prev => {
@@ -360,26 +368,37 @@ function Bubble({ msg }: { msg: Msg }) {
         {!isUser && msg.streaming && msg.content && (
           <span className="inline-block w-1.5 h-3 align-middle ml-0.5 bg-primary animate-pulse rounded-sm" />
         )}
-        {!isUser && !msg.streaming && msg.profileUpdated && msg.profileUpdated.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-border/50 flex items-start gap-1.5 text-[11px] text-muted-foreground">
-            <Sparkles className="h-3 w-3 mt-0.5 text-primary shrink-0" />
-            <div>
-              <span className="font-medium text-primary">档案已更新</span>:&nbsp;
-              {msg.profileUpdated.map(f => (
-                <code key={f} className="mx-0.5 rounded bg-primary/10 px-1 py-px text-[10px] text-primary">{f}</code>
-              ))}
-            </div>
-          </div>
-        )}
-        {!isUser && !msg.streaming && msg.wishesMarked && msg.wishesMarked.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-border/50 flex items-start gap-1.5 text-[11px] text-muted-foreground">
-            <Sparkles className="h-3 w-3 mt-0.5 text-amber-500 shrink-0" />
-            <div>
-              <span className="font-medium text-amber-600">记录心愿</span>:&nbsp;
-              {msg.wishesMarked.map((w, i) => (
-                <span key={i} className="mx-0.5 rounded bg-amber-500/10 px-1 py-px text-[10px] text-amber-600">{w.content}</span>
-              ))}
-            </div>
+        {!isUser && !msg.streaming && msg.syncStatus && (
+          <div className="mt-2 pt-2 border-t border-border/50 space-y-1 text-[11px] text-muted-foreground">
+            {msg.syncStatus.error ? (
+              <div className="flex items-start gap-1.5 text-destructive">
+                <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                <span>后台同步失败: {msg.syncStatus.error}</span>
+              </div>
+            ) : (
+              <>
+                {/* 档案 */}
+                <div className="flex items-start gap-1.5">
+                  <Sparkles className={`h-3 w-3 mt-0.5 shrink-0 ${(msg.profileUpdated?.length ?? 0) > 0 ? "text-primary" : "text-muted-foreground/50"}`} />
+                  <div>
+                    <span className={`font-medium ${(msg.profileUpdated?.length ?? 0) > 0 ? "text-primary" : ""}`}>档案</span>:&nbsp;
+                    {(msg.profileUpdated?.length ?? 0) > 0
+                      ? msg.profileUpdated!.map(f => <code key={f} className="mx-0.5 rounded bg-primary/10 px-1 py-px text-[10px] text-primary">{f}</code>)
+                      : <span>{msg.syncStatus.profileNote || "无变更"}</span>}
+                  </div>
+                </div>
+                {/* 心愿 */}
+                <div className="flex items-start gap-1.5">
+                  <Sparkles className={`h-3 w-3 mt-0.5 shrink-0 ${(msg.wishesMarked?.length ?? 0) > 0 ? "text-amber-500" : "text-muted-foreground/50"}`} />
+                  <div>
+                    <span className={`font-medium ${(msg.wishesMarked?.length ?? 0) > 0 ? "text-amber-600" : ""}`}>心愿</span>:&nbsp;
+                    {(msg.wishesMarked?.length ?? 0) > 0
+                      ? msg.wishesMarked!.map((w, i) => <span key={i} className="mx-0.5 rounded bg-amber-500/10 px-1 py-px text-[10px] text-amber-600">{w.content}</span>)
+                      : <span>{msg.syncStatus.wishNote || "本轮无"}</span>}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

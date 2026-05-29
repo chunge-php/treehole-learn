@@ -17,7 +17,10 @@ type Msg = { role: "user" | "assistant"; content: string; streaming?: boolean; p
 
 export function AiChatClient({ data }: { data: ChatBootstrap }) {
   const [studentId, setStudentId] = useState("");
-  const [templateId, setTemplateId] = useState(data.templates[0]?.id || "");
+  // 默认优先选主对话模板, 避免被新插入的其他模板 (updated_at 最新) 顶到默认位
+  const [templateId, setTemplateId] = useState(
+    (data.templates.find(t => t.code === "multimodal_ai_tutor") || data.templates[0])?.id || ""
+  );
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [systemPromptPreview, setSystemPromptPreview] = useState<{ system_role: string; prefix_rendered: string; rules: string; full: string } | null>(null);

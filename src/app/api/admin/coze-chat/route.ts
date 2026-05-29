@@ -9,7 +9,7 @@
  */
 import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { streamWorkflow, runWorkflow, uploadFileToCoze } from "@/lib/coze/client";
+import { streamWorkflow, runWorkflow, uploadFileToCoze, extractWorkflowText, isEmptyReply } from "@/lib/coze/client";
 import { buildSystemPrompt } from "@/app/(admin)/tests/ai-chat/actions";
 import { updateProfileFromChat } from "@/lib/profile/sync";
 import { runProfileExtract } from "@/lib/profile/extract";
@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
         // 扣子开始节点 history 字段需配为 String 类型
         const historyText = (history as any[])
           .filter(m => m && (m.role === "user" || m.role === "assistant") && m.content)
+          .filter(m => !(m.role === "assistant" && isEmptyReply(String(m.content))))
           .map(m => (m.role === "user" ? "学生: " : "导师: ") + m.content)
           .join("\n\n");
         // 图片处理: 本地/内网 URL 扣子云端 fetch 不到, 先后端 fetch → 上传到扣子拿 file_id
@@ -92,19 +93,22 @@ export async function POST(req: NextRequest) {
             ...(cozeImageParam ? { image_url: cozeImageParam } : {})
           }
         })) {
-          if (evt.type === "delta") {
-            full += evt.text;
-            send("delta", { text: evt.text });
-          } else if (evt.type === "message") {
+          if (evt.type === "delta" || evt.type === "message") {
+            // 跳过纯空 JSON 占位片段 ({}/[]); 扣子多轮时中间节点常吐这些, 不该进回复, 否则污染 history 滚雪球
+            if (isEmptyReply(evt.text)) continue;
             full += evt.text;
             send("delta", { text: evt.text });
           } else if (evt.type === "done") {
-            // 如果工作流最终 output 是字符串而中途没推 delta, 用 output 兜底
+            // 工作流没推 delta 时, 从 output 安全提取文本兜底 (绝不 JSON.stringify 对象, 否则 {} 直接显示给用户)
             if (!full && evt.output) {
-              const t = typeof evt.output === "string" ? evt.output
-                : (evt.output?.output || evt.output?.answer || JSON.stringify(evt.output));
-              full = String(t);
-              send("delta", { text: full });
+              const t = extractWorkflowText(evt.output);
+              if (t) { full = t; send("delta", { text: full }); }
+            }
+            // 整段为空 / 只剩空 JSON → 报错而非把 {} 当回复 (扣子多轮偶发空返回)
+            if (isEmptyReply(full)) {
+              send("error", { message: "AI 返回为空, 请重试 (扣子工作流多轮可能未正确输出)" });
+              controller.close();
+              return;
             }
 
             // 立刻推 done → 前端解禁输入框, 用户可继续发言

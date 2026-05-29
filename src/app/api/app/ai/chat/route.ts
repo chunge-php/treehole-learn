@@ -20,7 +20,7 @@
 import { NextRequest } from "next/server";
 import { adminSupabase } from "@/lib/supabase/admin";
 import { requireAppAuth } from "@/lib/app-session";
-import { streamWorkflow, runWorkflow, uploadFileToCoze } from "@/lib/coze/client";
+import { streamWorkflow, runWorkflow, uploadFileToCoze, extractWorkflowText, isEmptyReply } from "@/lib/coze/client";
 import { renderPrompt, updateProfileFromChat, mergeProfileUpdate } from "@/lib/profile/sync";
 import { runWishExtract } from "@/lib/profile/wish-extract";
 
@@ -90,6 +90,8 @@ export async function POST(req: NextRequest) {
   // 历史对话拼字符串
   const historyText = (history as any[])
     .filter(m => m && (m.role === "user" || m.role === "assistant") && m.content)
+    // 丢掉历史里的空 JSON 占位 ({}/[]) 助手回复, 防止旧脏数据再次污染多轮
+    .filter(m => !(m.role === "assistant" && isEmptyReply(String(m.content))))
     .map(m => (m.role === "user" ? "学生: " : "导师: ") + m.content)
     .join("\n\n");
 
@@ -123,14 +125,20 @@ export async function POST(req: NextRequest) {
           }
         })) {
           if (evt.type === "delta" || evt.type === "message") {
+            // 跳过纯空 JSON 占位 ({}/[]), 扣子多轮中间节点常吐, 不该进回复 (会污染 history 滚雪球)
+            if (isEmptyReply(evt.text)) continue;
             full += evt.text;
             send("delta", { text: evt.text });
           } else if (evt.type === "done") {
             if (!full && evt.output) {
-              const t = typeof evt.output === "string" ? evt.output
-                : (evt.output?.output || evt.output?.answer || JSON.stringify(evt.output));
-              full = String(t);
-              send("delta", { text: full });
+              const t = extractWorkflowText(evt.output);   // 安全提取, 绝不 JSON.stringify 对象
+              if (t) { full = t; send("delta", { text: full }); }
+            }
+            // 整段为空 / 只剩空 JSON → 报错, 别把 {} 当回复发给学生端
+            if (isEmptyReply(full)) {
+              send("error", { message: "AI 返回为空, 请重试" });
+              controller.close();
+              return;
             }
             // 主对话 done 立刻关流, 学生看完回复就能继续聊
             send("done", { full });

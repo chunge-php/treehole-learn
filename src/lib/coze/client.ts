@@ -63,6 +63,26 @@ export function cozeConfigured(): boolean {
   return !!TOKEN;
 }
 
+/** 是否是"空内容" — 纯空白 / 空 JSON 对象数组 (扣子多轮有时返回 {} 占位, 不能当回复展示给用户) */
+export function isEmptyReply(text: string): boolean {
+  const t = (text || "").trim();
+  if (!t) return true;
+  return /^(\{\s*\}|\[\s*\])+$/.test(t);   // 形如 {} / [] / {}{} / {}[]
+}
+
+/** 从扣子 output 里安全提取可展示文本 —— 只认字符串字段, 绝不 JSON.stringify 对象塞给用户 */
+export function extractWorkflowText(output: any): string {
+  if (output == null) return "";
+  if (typeof output === "string") return output;
+  if (typeof output === "object") {
+    for (const k of ["output", "answer", "content", "text", "data", "result", "letter"]) {
+      const v = (output as any)[k];
+      if (typeof v === "string" && v.trim()) return v;
+    }
+  }
+  return "";   // 对象但无可读字符串字段 → 视为空, 交给上层报错而非显示 [object Object]/{}
+}
+
 function headers(): Record<string, string> {
   return {
     "Content-Type": "application/json",

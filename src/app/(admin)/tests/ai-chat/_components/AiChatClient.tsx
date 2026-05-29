@@ -73,7 +73,15 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
 
     const userMessage = input.trim();
     const usingImage = pendingImage;
-    const history = messages.map(m => ({ role: m.role, content: m.content }));
+    // 过滤掉空 / 报错 / 纯空 JSON 的助手气泡, 不让它们进 history 污染下一轮 (避免 {} 滚雪球)
+    const history = messages
+      .filter(m => {
+        const c = (m.content || "").trim();
+        if (!c) return false;
+        if (m.role === "assistant" && (c.startsWith("❌") || /^(\{\s*\}|\[\s*\])+$/.test(c))) return false;
+        return true;
+      })
+      .map(m => ({ role: m.role, content: m.content }));
 
     // 用 setMessages 内部计算 assistantIdx, 锁定本次 SSE 流要更新哪条气泡
     // (用户连发时, prev.length-1 会指向新对话的气泡导致徽章错位, 固定 idx 避免)

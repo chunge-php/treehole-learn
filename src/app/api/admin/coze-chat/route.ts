@@ -13,6 +13,7 @@ import { streamWorkflow, runWorkflow, uploadFileToCoze } from "@/lib/coze/client
 import { buildSystemPrompt } from "@/app/(admin)/tests/ai-chat/actions";
 import { updateProfileFromChat } from "@/lib/profile/sync";
 import { runProfileExtract } from "@/lib/profile/extract";
+import { runWishExtract } from "@/lib/profile/wish-extract";
 import { adminSupabase } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -120,11 +121,17 @@ export async function POST(req: NextRequest) {
                     assistant_message: full,
                     by: adminId
                   });
-                  const changedFields = await runProfileExtract({
-                    endUserId, userMessage, assistantMessage: full, by: adminId
-                  });
+                  // 档案抽取 + 心愿识别并行 (互不依赖, 各自走自己的工作流/表)
+                  const [changedFields, markedWishes] = await Promise.all([
+                    runProfileExtract({ endUserId, userMessage, assistantMessage: full, by: adminId }),
+                    runWishExtract({ endUserId, userMessage, assistantMessage: full, studentName })
+                  ]);
                   if (changedFields.length > 0) {
                     try { send("profile_updated", { fields: changedFields }); }
+                    catch { /* 前端可能已断开, 静默 */ }
+                  }
+                  if (markedWishes.length > 0) {
+                    try { send("wishes_marked", { wishes: markedWishes }); }
                     catch { /* 前端可能已断开, 静默 */ }
                   }
                 } catch (e: any) {

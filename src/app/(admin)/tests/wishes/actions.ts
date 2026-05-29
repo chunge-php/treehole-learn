@@ -12,13 +12,16 @@ export async function listWishItems(input: { endUserId: string; year: number; mo
   const start = new Date(input.year, input.month - 1, 1, 0, 0, 0, 0).toISOString();
   const end   = new Date(input.year, input.month,     1, 0, 0, 0, 0).toISOString();
   const { data, error } = await sb.from("student_wish_items")
-    .select("id, content, created_at")
+    .select("id, content, created_at, source, category")
     .eq("end_user_id", input.endUserId)
     .gte("created_at", start)
     .lt("created_at", end)
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data || []).map((w: any) => ({ id: w.id, content: w.content, createdAt: w.created_at }));
+  return (data || []).map((w: any) => ({
+    id: w.id, content: w.content, createdAt: w.created_at,
+    source: w.source || "manual", category: w.category || null
+  }));
 }
 
 /** 测试中心: 替学生加一条心愿 (模拟 App 端写入), 便于不依赖 App 测信件生成 */

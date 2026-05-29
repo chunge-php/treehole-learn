@@ -25,7 +25,7 @@ export function WishLetterTesterClient({
   const [rendered, setRendered] = useState("");
   const [tplMeta, setTplMeta] = useState<{ name?: string; system_role?: string; rules?: string; prefix_template?: string }>(defaultTemplate || {});
 
-  const [items, setItems] = useState<Array<{ id: string; content: string; createdAt: string }>>([]);
+  const [items, setItems] = useState<Array<{ id: string; content: string; createdAt: string; source?: string; category?: string | null }>>([]);
   const [newWish, setNewWish] = useState("");
 
   const [previewing, startPreview] = useTransition();
@@ -213,7 +213,7 @@ export function WishLetterTesterClient({
             <Badge variant="secondary">{items.length} 条</Badge>
             {loadingItems && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
           </div>
-          <span className="text-xs text-muted-foreground">扣子生成信件时会读取这些</span>
+          <span className="text-xs text-muted-foreground">聊天中 AI 自动识别 + 手动添加, 生成信件时全部读取</span>
         </div>
 
         <div className="flex gap-2 mb-3">
@@ -236,6 +236,10 @@ export function WishLetterTesterClient({
               <div key={w.id} className="flex items-center gap-2 text-sm bg-muted/40 rounded px-3 py-2">
                 <span className="text-xs text-muted-foreground w-6">{i + 1}.</span>
                 <span className="flex-1">{w.content}</span>
+                {w.source === "ai_chat"
+                  ? <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-600">🌟 聊天识别</Badge>
+                  : <Badge variant="outline" className="text-[10px] text-muted-foreground">手动</Badge>}
+                {w.category && <Badge variant="secondary" className="text-[10px]">{w.category}</Badge>}
                 <span className="text-xs text-muted-foreground">{new Date(w.createdAt).toLocaleDateString()}</span>
                 <Button size="sm" variant="ghost" onClick={() => removeWish(w.id)} className="h-6 w-6 p-0 text-destructive hover:text-destructive">
                   <Trash2 className="h-3 w-3" />
@@ -245,7 +249,7 @@ export function WishLetterTesterClient({
           </div>
         ) : studentId ? (
           <div className="text-xs text-muted-foreground text-center py-4 italic">
-            该学生本月还没有心愿. 试着写一条 (会按学生第一人称写进信里)
+            该学生本月还没有心愿. 去「AI 聊天」页跟学生聊几句, AI 会自动识别心愿; 或在这里手动补一条
           </div>
         ) : (
           <div className="text-xs text-muted-foreground text-center py-4 italic">先选学生</div>

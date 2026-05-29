@@ -22,6 +22,7 @@ import { adminSupabase } from "@/lib/supabase/admin";
 import { requireAppAuth } from "@/lib/app-session";
 import { streamWorkflow, runWorkflow, uploadFileToCoze } from "@/lib/coze/client";
 import { renderPrompt, updateProfileFromChat, mergeProfileUpdate } from "@/lib/profile/sync";
+import { runWishExtract } from "@/lib/profile/wish-extract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -169,6 +170,13 @@ export async function POST(req: NextRequest) {
                       } catch { /* JSON 解析失败静默跳过 */ }
                     }
                   }
+                  // 心愿识别 — 静默写入 student_wish_items (学生端不推任何系统提示, 月底打包进家长信)
+                  await runWishExtract({
+                    endUserId: studentId,
+                    userMessage,
+                    assistantMessage: full,
+                    studentName
+                  });
                 } catch (e: any) {
                   console.error("[app/ai-chat] 后台档案同步失败:", e?.message || e);
                 }

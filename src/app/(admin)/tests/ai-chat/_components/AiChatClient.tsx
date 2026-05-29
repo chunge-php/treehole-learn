@@ -13,7 +13,7 @@ import { MarkdownView } from "@/components/admin/MarkdownView";
 import { uploadFile } from "@/lib/upload";
 import { toast } from "sonner";
 
-type Msg = { role: "user" | "assistant"; content: string; streaming?: boolean; profileUpdated?: string[]; imageUrl?: string };
+type Msg = { role: "user" | "assistant"; content: string; streaming?: boolean; profileUpdated?: string[]; wishesMarked?: { content: string; category?: string }[]; imageUrl?: string };
 
 export function AiChatClient({ data }: { data: ChatBootstrap }) {
   const [studentId, setStudentId] = useState("");
@@ -136,6 +136,17 @@ export function AiChatClient({ data }: { data: ChatBootstrap }) {
               return copy;
             });
             toast.success(`📋 档案已更新: ${fields.slice(0, 3).join(", ")}${fields.length > 3 ? ` 等 ${fields.length} 项` : ""}`);
+          }
+        } else if (event === "wishes_marked") {
+          const wishes: { content: string; category?: string }[] = Array.isArray(data?.wishes) ? data.wishes : [];
+          if (wishes.length > 0) {
+            setMessages(prev => {
+              if (!prev[assistantIdx] || prev[assistantIdx].role !== "assistant") return prev;
+              const copy = [...prev];
+              copy[assistantIdx] = { ...copy[assistantIdx], wishesMarked: wishes };
+              return copy;
+            });
+            toast.success(`🌟 记录了 ${wishes.length} 个心愿: ${wishes.map(w => w.content).slice(0, 2).join("、")}${wishes.length > 2 ? " 等" : ""}`);
           }
         } else if (event === "error") {
           setMessages(prev => {
@@ -345,6 +356,17 @@ function Bubble({ msg }: { msg: Msg }) {
               <span className="font-medium text-primary">档案已更新</span>:&nbsp;
               {msg.profileUpdated.map(f => (
                 <code key={f} className="mx-0.5 rounded bg-primary/10 px-1 py-px text-[10px] text-primary">{f}</code>
+              ))}
+            </div>
+          </div>
+        )}
+        {!isUser && !msg.streaming && msg.wishesMarked && msg.wishesMarked.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-border/50 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+            <Sparkles className="h-3 w-3 mt-0.5 text-amber-500 shrink-0" />
+            <div>
+              <span className="font-medium text-amber-600">记录心愿</span>:&nbsp;
+              {msg.wishesMarked.map((w, i) => (
+                <span key={i} className="mx-0.5 rounded bg-amber-500/10 px-1 py-px text-[10px] text-amber-600">{w.content}</span>
               ))}
             </div>
           </div>

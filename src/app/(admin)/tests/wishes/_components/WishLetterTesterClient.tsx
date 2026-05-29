@@ -8,8 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { previewLetterContext, runLetterGeneration, saveWishLetter, listWishItems, addTestWishItem, deleteWishItem, listSavedLetters, deleteSavedLetter, type StudentOpt } from "../actions";
-import { Wand2, FileText, Save, Loader2, Mail, Eye, Plus, Trash2, ListTodo, Inbox } from "lucide-react";
+import { previewLetterContext, runLetterGeneration, saveWishLetter, listWishItems, addTestWishItem, deleteWishItem, listSavedLetters, deleteSavedLetter, testWishExtract, type StudentOpt } from "../actions";
+import { Wand2, FileText, Save, Loader2, Mail, Eye, Plus, Trash2, ListTodo, Inbox, Stethoscope } from "lucide-react";
 import { toast } from "sonner";
 
 type TemplateMeta = { id: string; code: string; name: string; system_role: string; prefix_template: string; rules: string } | null;
@@ -36,6 +36,20 @@ export function WishLetterTesterClient({
   const [adding, startAdd] = useTransition();
   const [loadingLetters, startLoadLetters] = useTransition();
   const [deletingLetter, startDeleteLetter] = useTransition();
+
+  // 心愿识别自测
+  const [probeMsg, setProbeMsg] = useState("我想要一套《盗墓笔记》漫画");
+  const [probeResult, setProbeResult] = useState<any>(null);
+  const [probing, startProbe] = useTransition();
+  function runProbe() {
+    if (!probeMsg.trim()) { toast.error("写一句话"); return; }
+    startProbe(async () => {
+      try {
+        const r = await testWishExtract({ userMessage: probeMsg.trim(), endUserId: studentId || undefined });
+        setProbeResult(r);
+      } catch (e: any) { toast.error(e?.message || "自测失败"); }
+    });
+  }
 
   function refreshItems() {
     if (!studentId) { setItems([]); return; }
@@ -229,6 +243,39 @@ export function WishLetterTesterClient({
           {meta.mock && <Badge variant="outline" className="ml-2">⚠ Mock 模式 (扣子未配置)</Badge>}
           {meta.debugUrl && <a href={meta.debugUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline self-center">扣子调试链接</a>}
         </div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="flex items-center gap-2 text-sm font-medium mb-3">
+          <Stethoscope className="h-4 w-4" />
+          心愿识别自测
+          <span className="text-xs text-muted-foreground font-normal">喂一句话, 看扣子能否识别出心愿 (不写库, 排查"聊天说了没记录")</span>
+        </div>
+        <div className="flex gap-2 mb-3">
+          <Input value={probeMsg} onChange={(e) => setProbeMsg(e.target.value)} placeholder="例如: 我想要一套漫画 / 周末想休息一天"
+            onKeyDown={(e) => { if (e.key === "Enter") runProbe(); }} />
+          <Button onClick={runProbe} disabled={probing}>
+            {probing ? <Loader2 className="h-4 w-4 animate-spin" /> : "自测"}
+          </Button>
+        </div>
+        {probeResult && (
+          <div className="space-y-2 text-xs">
+            <div className="space-y-1 rounded bg-muted/40 p-3 font-mono">
+              {(probeResult.steps || []).map((s: string, i: number) => <div key={i}>{s}</div>)}
+            </div>
+            {probeResult.parsedWishes?.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {probeResult.parsedWishes.map((w: any, i: number) => (
+                  <Badge key={i} variant="outline" className="border-amber-400 text-amber-600">🌟 {w.content} · {w.category}</Badge>
+                ))}
+              </div>
+            )}
+            <details className="text-muted-foreground">
+              <summary className="cursor-pointer">扣子原始返回 (raw output)</summary>
+              <pre className="mt-1 overflow-x-auto rounded bg-muted/40 p-2 text-[10px] leading-relaxed">{JSON.stringify(probeResult.rawOutput, null, 2)}</pre>
+            </details>
+          </div>
+        )}
       </Card>
 
       <Card className="p-4">

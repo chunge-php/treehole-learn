@@ -119,3 +119,82 @@ export async function runWishExtract(args: {
   }
   return fresh;
 }
+
+/**
+ * 心愿识别自测 — 喂一句话, 把每一步都暴露出来, 用于排查"聊天说了心愿却没记录"。
+ * 不写库 (insert=false 时), 纯诊断。
+ */
+export async function debugWishExtract(args: {
+  endUserId?: string;
+  userMessage: string;
+  assistantMessage?: string;
+  studentName?: string;
+}): Promise<{
+  workflowId: string;
+  workflowSource: "wish_extract" | "profile_extract(fallback)" | "(none)";
+  templateFound: boolean;
+  rawOutput: any;
+  parsedWishes: MarkedWish[];
+  steps: string[];
+}> {
+  const steps: string[] = [];
+  const userMessage = (args.userMessage || "").trim();
+  const wishEnv = process.env.COZE_WORKFLOW_WISH_EXTRACT || "";
+  const profEnv = process.env.COZE_WORKFLOW_PROFILE_EXTRACT || "";
+  const workflowId = wishEnv || profEnv || "";
+  const workflowSource: any = wishEnv ? "wish_extract" : (profEnv ? "profile_extract(fallback)" : "(none)");
+
+  if (!userMessage) steps.push("❌ user_message 为空, 直接跳过 (纯看图等)");
+  if (!workflowId) steps.push("❌ 既没配 COZE_WORKFLOW_WISH_EXTRACT 也没配 COZE_WORKFLOW_PROFILE_EXTRACT");
+  else steps.push(`✅ 工作流来源=${workflowSource}, id=${workflowId}`);
+
+  const sb = adminSupabase();
+  const { data: tpl } = await sb.from("prompt_templates")
+    .select("system_role").eq("code", "wish_extract").eq("is_active", true).maybeSingle();
+  const templateFound = !!tpl?.system_role;
+  steps.push(templateFound
+    ? "✅ 找到 wish_extract 提示词模板"
+    : "❌ 没找到 wish_extract 模板 (migration 35 没跑 / 模板被禁用) → 这是最常见原因");
+
+  let rawOutput: any = null;
+  let parsedWishes: MarkedWish[] = [];
+  if (workflowId && templateFound && userMessage) {
+    try {
+      const res = await runWorkflow({
+        workflowId,
+        parameters: {
+          system_prompt: tpl!.system_role,
+          student_name: args.studentName || "",
+          user_message: userMessage,
+          assistant_message: args.assistantMessage || ""
+        }
+      });
+      rawOutput = res.data;
+      let raw: any = res.data;
+      if (raw && typeof raw === "object" && "output" in raw) raw = (raw as any).output;
+      let parsed: any = null;
+      if (typeof raw === "string") {
+        const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+        try { parsed = JSON.parse(cleaned); } catch { steps.push("⚠️ 扣子返回的是字符串但不是合法 JSON"); }
+      } else if (raw && typeof raw === "object") {
+        parsed = raw;
+      }
+      const arr = Array.isArray(parsed?.wishes) ? parsed.wishes : (Array.isArray(parsed) ? parsed : []);
+      if (parsed && !Array.isArray(parsed?.wishes) && !Array.isArray(parsed)) {
+        steps.push(`⚠️ 解析出 JSON 但没有 wishes 数组 — 工作流可能没按提示词输出 (返回的 key: ${Object.keys(parsed).join(", ") || "无"})。八成是 profile_extract 工作流写死了输出格式, 需要单独建 wish_extract 工作流。`);
+      }
+      parsedWishes = arr
+        .map((w: any) => ({
+          content: String(w?.content ?? w?.心愿 ?? "").trim().slice(0, CONTENT_MAX),
+          category: CATEGORIES.includes(String(w?.category ?? "")) ? String(w.category) : "情感诉求"
+        }))
+        .filter((w: MarkedWish) => w.content.length > 0);
+      steps.push(parsedWishes.length > 0
+        ? `✅ 识别出 ${parsedWishes.length} 个心愿`
+        : "⚠️ 工作流跑通了但没识别出心愿 (这句话不含心愿 / 提示词或工作流没生效)");
+    } catch (e: any) {
+      steps.push(`❌ 调扣子工作流报错: ${e?.message || e}`);
+    }
+  }
+  return { workflowId, workflowSource, templateFound, rawOutput, parsedWishes, steps };
+}

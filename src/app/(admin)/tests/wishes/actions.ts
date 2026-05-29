@@ -3,7 +3,14 @@ import { adminSupabase } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth";
 import { generateLetter, loadLetterTemplate, buildLetterContext } from "@/lib/wish-letter";
 import { runProfileExtract } from "@/lib/profile/extract";
+import { debugWishExtract } from "@/lib/profile/wish-extract";
 import { shortId } from "@/lib/utils";
+
+/** 心愿识别自测: 喂一句话, 返回每一步诊断 (不写库) */
+export async function testWishExtract(input: { userMessage: string; assistantMessage?: string; endUserId?: string; studentName?: string }) {
+  requireAdmin();
+  return debugWishExtract(input);
+}
 
 /** 列出指定学生当月的心愿条目 (测试中心展示用) */
 export async function listWishItems(input: { endUserId: string; year: number; month: number }) {

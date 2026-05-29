@@ -35,6 +35,7 @@ export async function listActivePromptTemplates() {
     .from("prompt_templates")
     .select("id, code, name, system_role, prefix_template, rules")
     .eq("is_active", true)
+    .eq("kind", "chat")   // 白名单: 只列主对话模板, 抽取/信件类不出现 (防被新模板顶成默认选中)
     .order("updated_at", { ascending: false });
   return (data || []) as Array<{ id: string; code: string; name: string; system_role: string; prefix_template: string; rules: string }>;
 }

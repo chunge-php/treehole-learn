@@ -34,10 +34,7 @@ export async function bootstrapChat(): Promise<ChatBootstrap> {
     sb.from("prompt_templates")
       .select("id, code, name, system_role, prefix_template, rules")
       .eq("is_active", true)
-      // 聊天页只让选主对话提示词; 抽取类/信件类模板会让 AI 输出 JSON 或写信, 一律过滤掉
-      .neq("code", "profile_extract")
-      .neq("code", "wish_extract")
-      .neq("code", "monthly_wish_letter")
+      .eq("kind", "chat")   // 白名单: 聊天页只选主对话模板; 抽取/信件类 (kind=extract/letter) 一律不出现
       .order("updated_at", { ascending: false })
   ]);
   return {

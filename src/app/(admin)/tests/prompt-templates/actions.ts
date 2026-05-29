@@ -4,11 +4,14 @@ import { adminSupabase } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth";
 import { shortId } from "@/lib/utils";
 
+export type PromptTemplateKind = "chat" | "extract" | "letter";
+
 export type PromptTemplateRow = {
   id: string;
   code: string;
   name: string;
   description: string | null;
+  kind: PromptTemplateKind;
   system_role: string;
   prefix_template: string;
   rules: string;
@@ -22,7 +25,7 @@ export async function listPromptTemplates(): Promise<PromptTemplateRow[]> {
   const sb = adminSupabase();
   const { data, error } = await sb
     .from("prompt_templates")
-    .select("id, code, name, description, system_role, prefix_template, rules, is_active, version, updated_at")
+    .select("id, code, name, description, kind, system_role, prefix_template, rules, is_active, version, updated_at")
     .order("updated_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data || []) as PromptTemplateRow[];
@@ -33,7 +36,7 @@ export async function getPromptTemplate(id: string): Promise<PromptTemplateRow |
   const sb = adminSupabase();
   const { data } = await sb
     .from("prompt_templates")
-    .select("id, code, name, description, system_role, prefix_template, rules, is_active, version, updated_at")
+    .select("id, code, name, description, kind, system_role, prefix_template, rules, is_active, version, updated_at")
     .eq("id", id)
     .maybeSingle();
   return (data as PromptTemplateRow) || null;
@@ -51,6 +54,7 @@ export async function upsertPromptTemplate(input: Partial<PromptTemplateRow> & {
   const payload: any = {
     id, code, name,
     description: input.description ?? null,
+    kind: (["chat", "extract", "letter"] as const).includes(input.kind as any) ? input.kind : "chat",
     system_role: input.system_role || "",
     prefix_template: input.prefix_template || "",
     rules: input.rules || "",

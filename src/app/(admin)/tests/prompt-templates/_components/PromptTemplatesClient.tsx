@@ -16,8 +16,19 @@ import { upsertPromptTemplate, deletePromptTemplate, type PromptTemplateRow } fr
 import { toast } from "sonner";
 
 const EMPTY: PromptTemplateRow = {
-  id: "", code: "", name: "", description: "", system_role: "", prefix_template: "", rules: "",
+  id: "", code: "", name: "", description: "", kind: "chat", system_role: "", prefix_template: "", rules: "",
   is_active: true, version: 0, updated_at: ""
+};
+
+const KIND_OPTS: { value: "chat" | "extract" | "letter"; label: string; hint: string }[] = [
+  { value: "chat",    label: "主对话",  hint: "聊天页可选, 跟学生正常对话" },
+  { value: "extract", label: "抽取",    hint: "档案/心愿分析, 输出 JSON, 聊天页禁选" },
+  { value: "letter",  label: "信件",    hint: "月度家长信, 聊天页禁选" }
+];
+const KIND_BADGE: Record<string, { label: string; variant: any }> = {
+  chat:    { label: "主对话", variant: "default" },
+  extract: { label: "抽取",   variant: "secondary" },
+  letter:  { label: "信件",   variant: "outline" }
 };
 
 export function PromptTemplatesClient({ initialRows }: { initialRows: PromptTemplateRow[] }) {
@@ -70,6 +81,7 @@ export function PromptTemplatesClient({ initialRows }: { initialRows: PromptTemp
               <TableRow>
                 <TableHead>名称</TableHead>
                 <TableHead>code</TableHead>
+                <TableHead>类型</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>版本</TableHead>
                 <TableHead>更新时间</TableHead>
@@ -84,6 +96,9 @@ export function PromptTemplatesClient({ initialRows }: { initialRows: PromptTemp
                     {r.description && <div className="text-xs text-muted-foreground mt-0.5">{r.description}</div>}
                   </TableCell>
                   <TableCell><code className="text-xs">{r.code}</code></TableCell>
+                  <TableCell>
+                    <Badge variant={(KIND_BADGE[r.kind] || KIND_BADGE.chat).variant}>{(KIND_BADGE[r.kind] || KIND_BADGE.chat).label}</Badge>
+                  </TableCell>
                   <TableCell>
                     {r.is_active ? <Badge variant="success">启用</Badge> : <Badge variant="secondary">禁用</Badge>}
                   </TableCell>
@@ -122,6 +137,18 @@ export function PromptTemplatesClient({ initialRows }: { initialRows: PromptTemp
               <div className="space-y-1.5">
                 <Label className="flex items-center gap-1"><Tag className="h-3.5 w-3.5" /> 名称</Label>
                 <Input value={editing.name} onChange={e => setEditing(p => ({ ...p, name: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>类型</Label>
+              <div className="flex gap-2">
+                {KIND_OPTS.map(o => (
+                  <button key={o.value} type="button" onClick={() => setEditing(p => ({ ...p, kind: o.value }))}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-left transition ${editing.kind === o.value ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:bg-muted/50"}`}>
+                    <div className="text-sm font-medium">{o.label}</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">{o.hint}</div>
+                  </button>
+                ))}
               </div>
             </div>
             <div className="space-y-1.5">
